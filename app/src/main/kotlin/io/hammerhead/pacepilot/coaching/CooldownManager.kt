@@ -18,7 +18,10 @@ import io.hammerhead.pacepilot.model.currentMode
  * Per-rule suppression prevents the same rule from firing too frequently
  * (each CoachingEvent carries its own suppressIfFiredInLastSec).
  */
-class CooldownManager(private val cooldownMultiplier: Float = 1.0f) {
+class CooldownManager(
+    private val cooldownMultiplier: Float = 1.0f,
+    private val clockProvider: () -> Long = { System.currentTimeMillis() / 1000 },
+) {
 
     /** epoch-second of last fired event */
     private var lastGlobalFireSec: Long = 0L
@@ -26,14 +29,9 @@ class CooldownManager(private val cooldownMultiplier: Float = 1.0f) {
     /** Per-rule: epoch-second of last fire */
     private val lastFireByRule = mutableMapOf<String, Long>()
 
-    /**
-     * Returns true if [event] is allowed to fire right now.
-     * Checks both the global cooldown and per-rule suppression.
-     */
     fun canFire(event: io.hammerhead.pacepilot.model.CoachingEvent, ctx: RideContext): Boolean {
-        val nowSec = System.currentTimeMillis() / 1000
+        val nowSec = clockProvider()
 
-        // Critical events bypass global cooldown but still respect per-rule suppression
         if (event.priority != CoachingPriority.CRITICAL) {
             val globalCooldown = globalCooldownSec(ctx)
             if (nowSec - lastGlobalFireSec < globalCooldown) {
@@ -41,7 +39,6 @@ class CooldownManager(private val cooldownMultiplier: Float = 1.0f) {
             }
         }
 
-        // Per-rule suppression
         val ruleSuppress = event.suppressIfFiredInLastSec
         if (ruleSuppress != null) {
             val lastFire = lastFireByRule[event.ruleId] ?: 0L
@@ -50,7 +47,6 @@ class CooldownManager(private val cooldownMultiplier: Float = 1.0f) {
             }
         }
 
-        // Silence window (manual suppression from BonusAction)
         if (nowSec < ctx.silencedUntilSec && event.priority != CoachingPriority.CRITICAL) {
             return false
         }
@@ -59,8 +55,7 @@ class CooldownManager(private val cooldownMultiplier: Float = 1.0f) {
     }
 
     fun recordFired(ruleId: String, priority: CoachingPriority = CoachingPriority.MEDIUM) {
-        val nowSec = System.currentTimeMillis() / 1000
-        // INFO alerts (mode announcements) don't set global cooldown — they shouldn't block real coaching
+        val nowSec = clockProvider()
         if (priority != CoachingPriority.INFO) {
             lastGlobalFireSec = nowSec
         }
