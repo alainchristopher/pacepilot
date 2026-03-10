@@ -1,0 +1,319 @@
+package io.hammerhead.pacepilot.telemetry
+
+import io.hammerhead.karooext.KarooSystemService
+import io.hammerhead.karooext.models.DataType
+import io.hammerhead.karooext.models.OnNavigationState
+import io.hammerhead.karooext.models.OnNavigationState.NavigationState
+import io.hammerhead.karooext.models.StreamState
+import io.hammerhead.karooext.models.UserProfile
+import io.hammerhead.pacepilot.model.ActiveMode
+import io.hammerhead.pacepilot.model.IntervalPhase
+import io.hammerhead.pacepilot.model.RideContext
+import io.hammerhead.pacepilot.util.ZoneCalculator
+import io.hammerhead.pacepilot.settings.SettingsRepository
+import io.hammerhead.pacepilot.util.consumerFlow
+import io.hammerhead.pacepilot.util.streamDataFlow
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.mapNotNull
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import timber.log.Timber
+
+/**
+ * Combines all Karoo data streams into a single [RideContext] StateFlow.
+ * Instantiate once; call [start]/[stop] with ride lifecycle.
+ */
+class TelemetryAggregator(
+    private val karooSystem: KarooSystemService,
+    private val workoutCollector: WorkoutStreamCollector,
+    private val settingsRepo: SettingsRepository,
+    private val scope: CoroutineScope,
+) {
+    private val _context = MutableStateFlow(RideContext())
+    val rideContext: StateFlow<RideContext> = _context.asStateFlow()
+
+    val powerAnalyzer = PowerAnalyzer()
+    val hrAnalyzer = HrAnalyzer()
+
+    private var ftpFromProfile = 250
+    private var maxHrFromProfile = 185
+    private var rideStartEpochSec = 0L
+    private var lastTickSec = 0L
+
+    private val streamJobs = mutableListOf<Job>()
+
+    fun start() {
+        rideStartEpochSec = System.currentTimeMillis() / 1000
+        workoutCollector.start()
+
+        streamJobs += scope.launch { collectUserProfile() }
+        streamJobs += scope.launch { collectPower() }
+        streamJobs += scope.launch { collectHr() }
+        streamJobs += scope.launch { collectCadence() }
+        streamJobs += scope.launch { collectSpeed() }
+        streamJobs += scope.launch { collectDistance() }
+        streamJobs += scope.launch { collectGrade() }
+        streamJobs += scope.launch { collectElevationGain() }
+        streamJobs += scope.launch { collectNavigation() }
+        collectClimbStreams() // adds to streamJobs internally
+        streamJobs += scope.launch { collectWorkoutState() }
+        streamJobs += scope.launch { tickLoop() }
+    }
+
+    fun stop() {
+        streamJobs.forEach { it.cancel() }
+        streamJobs.clear()
+        powerAnalyzer.resetForNewRide()
+        hrAnalyzer.resetForNewRide()
+    }
+
+    fun updateMode(mode: ActiveMode) {
+        _context.update { it.copy(activeMode = mode) }
+    }
+
+    fun updateSilence(untilSec: Long) {
+        _context.update { it.copy(silencedUntilSec = untilSec) }
+    }
+
+    fun acknowledgedFuel() {
+        _context.update { it.copy(lastFuelingAckSec = System.currentTimeMillis() / 1000) }
+    }
+
+    // ------------------------------------------------------------------
+    // Private stream collectors
+    // ------------------------------------------------------------------
+
+    private suspend fun collectUserProfile() {
+        karooSystem.consumerFlow<UserProfile>().collect { profile ->
+            val settings = settingsRepo.current
+            ftpFromProfile = profile.ftp
+            maxHrFromProfile = profile.maxHr
+            val ftp = if (settings.ftpOverride > 0) settings.ftpOverride else ftpFromProfile
+            val maxHr = if (settings.maxHrOverride > 0) settings.maxHrOverride else maxHrFromProfile
+            _context.update { it.copy(ftp = ftp, maxHr = maxHr) }
+        }
+    }
+
+    private suspend fun collectPower() {
+        karooSystem.streamDataFlow(DataType.Type.POWER)
+            .mapNotNull { (it as? StreamState.Streaming)?.dataPoint?.singleValue?.toInt() }
+            .collect { watts ->
+                val ctx = _context.value
+                powerAnalyzer.onPowerSample(watts, ctx.ftp)
+                if (ctx.workout.isActive) {
+                    powerAnalyzer.onIntervalCompliance(ctx.workout.targetLow, ctx.workout.targetHigh)
+                }
+                val zone = ZoneCalculator.powerZone(watts, ctx.ftp)
+                _context.update { c ->
+                    c.copy(
+                        powerWatts = watts,
+                        power5sAvg = powerAnalyzer.power5sAvg,
+                        power30sAvg = powerAnalyzer.power30sAvg,
+                        power3minAvg = powerAnalyzer.power3minAvg,
+                        normalizedPower = powerAnalyzer.normalizedPower(),
+                        variabilityIndex = powerAnalyzer.variabilityIndex(),
+                        powerZone = zone,
+                    )
+                }
+            }
+    }
+
+    private suspend fun collectHr() {
+        karooSystem.streamDataFlow(DataType.Type.HEART_RATE)
+            .mapNotNull { (it as? StreamState.Streaming)?.dataPoint?.singleValue?.toInt() }
+            .collect { bpm ->
+                val ctx = _context.value
+                hrAnalyzer.onHrSample(bpm, ctx.powerWatts, ctx.rideElapsedSec, ctx.maxHr)
+                val zone = ZoneCalculator.hrZone(bpm, ctx.maxHr)
+                _context.update { c ->
+                    c.copy(
+                        heartRateBpm = bpm,
+                        hrZone = zone,
+                        hrRecoveryRate = hrAnalyzer.lastRecoveryDropRate(),
+                        hrDecouplingPct = hrAnalyzer.decouplingPct(),
+                    )
+                }
+            }
+    }
+
+    private suspend fun collectCadence() {
+        karooSystem.streamDataFlow(DataType.Type.CADENCE)
+            .mapNotNull { (it as? StreamState.Streaming)?.dataPoint?.singleValue?.toInt() }
+            .collect { rpm -> _context.update { it.copy(cadenceRpm = rpm) } }
+    }
+
+    private suspend fun collectSpeed() {
+        karooSystem.streamDataFlow(DataType.Type.SPEED)
+            .mapNotNull { (it as? StreamState.Streaming)?.dataPoint?.singleValue }
+            .collect { mps -> _context.update { it.copy(speedKmh = (mps * 3.6).toFloat()) } }
+    }
+
+    private suspend fun collectDistance() {
+        karooSystem.streamDataFlow(DataType.Type.DISTANCE)
+            .mapNotNull { (it as? StreamState.Streaming)?.dataPoint?.singleValue }
+            .collect { m -> _context.update { it.copy(distanceKm = (m / 1000.0).toFloat()) } }
+    }
+
+    private suspend fun collectGrade() {
+        karooSystem.streamDataFlow(DataType.Type.ELEVATION_GRADE)
+            .mapNotNull { (it as? StreamState.Streaming)?.dataPoint?.singleValue }
+            .collect { grade ->
+                _context.update { c ->
+                    c.copy(
+                        elevationGradePct = grade.toFloat(),
+                        isOnClimb = grade > 1.5,
+                        isDescending = grade < -1.5,
+                    )
+                }
+            }
+    }
+
+    private suspend fun collectElevationGain() {
+        karooSystem.streamDataFlow(DataType.Type.ELEVATION_GAIN)
+            .mapNotNull { (it as? StreamState.Streaming)?.dataPoint?.singleValue }
+            .collect { gainM -> _context.update { it.copy(elevationGainM = gainM.toFloat()) } }
+    }
+
+    private suspend fun collectNavigation() {
+        karooSystem.consumerFlow<OnNavigationState>().collect { navState ->
+            runCatching {
+                when (val nav = navState.state) {
+                    is NavigationState.NavigatingRoute -> {
+                        _context.update { c ->
+                            c.copy(
+                                hasRoute = true,
+                                totalClimbsOnRoute = runCatching { nav.climbs.size }.getOrElse { 0 },
+                                routeTotalElevationGainM = runCatching {
+                                    nav.climbs.sumOf { it.totalElevation }.toFloat()
+                                }.getOrElse { 0f },
+                                routeSteeplyGradedPct = runCatching {
+                                    val dist = nav.routeDistance.toFloat()
+                                    if (dist > 0)
+                                        nav.climbs.filter { it.grade > 4.0 }
+                                            .sumOf { it.length }
+                                            .toFloat() / dist * 100f
+                                    else 0f
+                                }.getOrElse { 0f },
+                            )
+                        }
+                    }
+                    is NavigationState.NavigatingToDestination -> {
+                        _context.update { c ->
+                            c.copy(
+                                hasRoute = true,
+                                totalClimbsOnRoute = runCatching { nav.climbs.size }.getOrElse { 0 },
+                                routeTotalElevationGainM = runCatching {
+                                    nav.climbs.sumOf { it.totalElevation }.toFloat()
+                                }.getOrElse { 0f },
+                            )
+                        }
+                    }
+                    is NavigationState.Idle -> {
+                        _context.update { c ->
+                            c.copy(
+                                hasRoute = false,
+                                routeTotalElevationGainM = 0f,
+                                routeSteeplyGradedPct = 0f,
+                                totalClimbsOnRoute = 0,
+                            )
+                        }
+                    }
+                }
+            }.onFailure { Timber.w(it, "TelemetryAggregator: navigation parse error (non-fatal)") }
+        }
+    }
+
+    private fun collectClimbStreams() {
+        // DISTANCE_TO_TOP stream
+        streamJobs += scope.launch {
+            karooSystem.streamDataFlow(DataType.Type.DISTANCE_TO_TOP)
+                .mapNotNull { (it as? StreamState.Streaming)?.dataPoint?.singleValue?.toFloat() }
+                .collect { distM -> _context.update { it.copy(distanceToClimbTopM = distM) } }
+        }
+        // CLIMB_NUMBER stream: provides current climb index + total via values map
+        streamJobs += scope.launch {
+            karooSystem.streamDataFlow(DataType.Type.CLIMB_NUMBER)
+                .mapNotNull { (it as? StreamState.Streaming)?.dataPoint?.values }
+                .collect { values ->
+                    runCatching {
+                        val climbNum = values["CLIMB_NUMBER"]?.toInt()
+                            ?: values.values.firstOrNull()?.toInt() ?: 0
+                        val totalClimbs = values["TOTAL_CLIMBS"]?.toInt()
+                            ?: values.values.drop(1).firstOrNull()?.toInt()
+                            ?: _context.value.totalClimbsOnRoute
+                        _context.update { it.copy(climbNumber = climbNum, totalClimbsOnRoute = totalClimbs) }
+                    }.onFailure { Timber.w(it, "TelemetryAggregator: CLIMB_NUMBER parse error") }
+                }
+        }
+    }
+
+    private suspend fun collectWorkoutState() {
+        workoutCollector.state.collect { ws ->
+            val ctx = _context.value
+            // Notify analyzers of interval phase transitions
+            val prevPhase = ctx.workout.currentPhase
+            if (ws.currentPhase != prevPhase) {
+                when (ws.currentPhase) {
+                    IntervalPhase.EFFORT -> {
+                        powerAnalyzer.startEffortInterval()
+                    }
+                    IntervalPhase.RECOVERY -> {
+                        powerAnalyzer.endEffortInterval()
+                        hrAnalyzer.startRecovery(ctx.heartRateBpm)
+                    }
+                    else -> {
+                        if (prevPhase == IntervalPhase.RECOVERY) {
+                            hrAnalyzer.endRecovery()
+                        }
+                    }
+                }
+            }
+
+            val completedEfforts = powerAnalyzer.effortSetAverages().size
+            val isFading = powerAnalyzer.isPowerFading()
+            val recovDeclining = hrAnalyzer.isRecoveryQualityDeclining()
+            val compliance = powerAnalyzer.complianceScore()
+
+            _context.update { c ->
+                c.copy(
+                    workout = ws.copy(
+                        completedEffortCount = completedEfforts,
+                        totalEffortCount = ws.totalSteps / 2, // heuristic: roughly half the steps
+                        complianceScore = compliance,
+                        recoveryQuality = if (hrAnalyzer.lastRecoveryDropRate() > 0)
+                            (hrAnalyzer.lastRecoveryDropRate() / 0.5f).coerceIn(0f, 1f) else 1f,
+                        powerFadingTrend = isFading,
+                        recoveryQualityDeclining = recovDeclining,
+                        effortAvgPowers = powerAnalyzer.effortSetAverages(),
+                        recoveryDropRates = hrAnalyzer.recoveryDropRateHistory,
+                    ),
+                    inFirstIntervalOfSession = ws.currentStep <= 1,
+                )
+            }
+        }
+    }
+
+    private suspend fun tickLoop() {
+        while (true) {
+            val nowSec = System.currentTimeMillis() / 1000
+            val elapsed = nowSec - rideStartEpochSec
+            val z1Minutes = if (powerAnalyzer.isSustainedZ1(60)) {
+                (_context.value.minutesInZ1Sustained + (1f / 60f)).coerceAtMost(30f)
+            } else 0f
+
+            _context.update { c ->
+                c.copy(
+                    rideElapsedSec = elapsed,
+                    isRecording = true,
+                    minutesInZ1Sustained = z1Minutes,
+                )
+            }
+
+            kotlinx.coroutines.delay(1000)
+        }
+    }
+}

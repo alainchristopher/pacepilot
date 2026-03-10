@@ -1,0 +1,4 @@
+-keep class io.hammerhead.karooext.** { *; }
+-keep class io.hammerhead.pacepilot.PacePilotExtension { *; }
+-keepattributes *Annotation*
+-dontwarn io.hammerhead.**

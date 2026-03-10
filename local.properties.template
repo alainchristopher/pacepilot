@@ -1,0 +1,7 @@
+# Copy this file to local.properties and fill in your credentials
+# Required to download karoo-ext from GitHub Packages
+gpr.user=YOUR_GITHUB_USERNAME
+gpr.key=YOUR_GITHUB_TOKEN_WITH_READ_PACKAGES_SCOPE
+
+# Android SDK path (auto-set by Android Studio usually)
+# sdk.dir=/Users/username/Library/Android/sdk

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- PacePilot brand — warm amber/orange on deep dark -->
+    <color name="pp_primary">#FF6D00</color>
+    <color name="pp_primary_variant">#FF8F00</color>
+    <color name="pp_primary_muted">#33FF6D00</color>
+    <color name="pp_on_primary">#FFFFFF</color>
+
+    <!-- Surfaces — Karoo-aligned deep black -->
+    <color name="pp_background">#0A0A0A</color>
+    <color name="pp_surface">#141414</color>
+    <color name="pp_surface_elevated">#1C1C1C</color>
+    <color name="pp_surface_card">#1A1A1A</color>
+    <color name="pp_on_surface">#F0F0F0</color>
+    <color name="pp_on_surface_variant">#9E9E9E</color>
+    <color name="pp_divider">#1F1F1F</color>
+
+    <!-- Alert notification colours — punchy, visible on Karoo display -->
+    <color name="alert_bg_coaching">#1A1A1A</color>
+    <color name="alert_bg_fuel">#1A2A1A</color>
+    <color name="alert_bg_warning">#2A1414</color>
+    <color name="alert_bg_positive">#142A1A</color>
+    <color name="alert_text_coaching">#FFFFFF</color>
+    <color name="alert_text_fuel">#FFFFFF</color>
+    <color name="alert_text_warning">#FFFFFF</color>
+    <color name="alert_text_positive">#FFFFFF</color>
+
+    <!-- Semantic -->
+    <color name="pp_success">#00E676</color>
+    <color name="pp_warning">#FFD600</color>
+    <color name="pp_error">#FF5252</color>
+    <color name="pp_info">#40C4FF</color>
+
+    <!-- Zone colours -->
+    <color name="zone_1">#78909C</color>
+    <color name="zone_2">#42A5F5</color>
+    <color name="zone_3">#66BB6A</color>
+    <color name="zone_4">#FFA726</color>
+    <color name="zone_5">#FF6D00</color>
+    <color name="zone_6">#EF5350</color>
+    <color name="zone_7">#AB47BC</color>
+</resources>

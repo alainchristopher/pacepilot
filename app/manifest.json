@@ -1,0 +1,9 @@
+{
+  "extensionId": "pacepilot",
+  "displayName": "PacePilot",
+  "description": "AI live coaching for Karoo — workout intelligence, mode detection, fueling, and pacing in one.",
+  "version": "1.0.0",
+  "minKosVersion": "1.548.2092",
+  "icon": "ic_pacepilot",
+  "category": "coaching"
+}

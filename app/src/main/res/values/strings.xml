@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PacePilot</string>
+    <string name="extension_name">PacePilot</string>
+
+    <!-- BonusAction labels -->
+    <string name="action_mode_workout">Mode: Workout</string>
+    <string name="action_mode_endurance">Mode: Endurance</string>
+    <string name="action_mode_climb">Mode: Climb</string>
+    <string name="action_mode_adaptive">Mode: Adaptive</string>
+    <string name="action_ack_fuel">Fueled ✓</string>
+    <string name="action_silence">Silence 10 min</string>
+
+    <!-- Settings labels -->
+    <string name="settings_ftp_label">FTP (watts)</string>
+    <string name="settings_ftp_hint">Leave blank to use Karoo profile</string>
+    <string name="settings_max_hr_label">Max HR (bpm)</string>
+    <string name="settings_max_hr_hint">Leave blank to use Karoo profile</string>
+    <string name="settings_alerts_enabled_label">Enable coaching alerts</string>
+    <string name="settings_fueling_alerts_label">Enable fueling reminders</string>
+    <string name="settings_cooldown_multiplier_label">Alert frequency</string>
+    <string name="settings_mode_override_label">Default mode</string>
+    <string name="settings_auto_detect">Auto-detect (recommended)</string>
+
+    <!-- Alert titles -->
+    <string name="alert_title_coaching">PacePilot</string>
+    <string name="alert_title_workout">Workout</string>
+    <string name="alert_title_fuel">Fueling</string>
+    <string name="alert_title_mode">Mode Changed</string>
+
+    <!-- Coaching messages: pre-interval -->
+    <string name="msg_effort_approaching_60s">Effort in 60 sec. Get ready.</string>
+    <string name="msg_effort_approaching_90s">Effort in 90 sec. Get ready.</string>
+    <string name="msg_fuel_before_effort">Fuel now. Hard effort coming.</string>
+    <string name="msg_first_effort">First effort block. Settle in — don\'t overcook.</string>
+
+    <!-- Coaching messages: during effort -->
+    <string name="msg_power_above_target">Ease back. %1$dW above target.</string>
+    <string name="msg_power_below_target">Push harder. %1$dW below target.</string>
+    <string name="msg_power_on_target">Good. Hold.</string>
+    <string name="msg_interval_countdown_30s">30 sec left. Hold.</string>
+    <string name="msg_cadence_dropping">Spin lighter. Cadence dropping.</string>
+    <string name="msg_hr_ceiling_exceeded">HR too high. Back off slightly.</string>
+
+    <!-- Coaching messages: recovery -->
+    <string name="msg_recovery_not_recovering">Actually recover. Drop to Z1.</string>
+    <string name="msg_hr_not_dropping">HR still high. Keep spinning easy.</string>
+    <string name="msg_recovering_well">Recovering well. Next effort in %1$d min.</string>
+    <string name="msg_fuel_recovery_window">Good time to fuel. Take a gel.</string>
+
+    <!-- Coaching messages: session-level -->
+    <string name="msg_last_interval">Final block. You have the fitness.</string>
+    <string name="msg_power_fading">Power fading. Consider stopping after this rep.</string>
+    <string name="msg_recovery_declining">Recovery slowing. Cut the session or reduce intensity.</string>
+    <string name="msg_session_complete">Session done. Nice work. Fuel within 20 min.</string>
+    <string name="msg_session_transitioning">Intervals done. Easy riding from here.</string>
+
+    <!-- Coaching messages: endurance -->
+    <string name="msg_zone_drift">You\'re drifting into tempo. Settle back to Z2.</string>
+    <string name="msg_fuel_time_based">Time to fuel. Take something.</string>
+    <string name="msg_hr_decoupling">HR drifting vs power. Protect the effort.</string>
+    <string name="msg_protect_last_hour">Protect the last hour. Stay in Z2.</string>
+    <string name="msg_pacing_consistent">Good pacing. Hold this.</string>
+
+    <!-- Coaching messages: climb -->
+    <string name="msg_climb_entry">Climb ahead. Settle in, don\'t overcook the start.</string>
+    <string name="msg_climb_power_ceiling">Too hard for a long climb. Drop 10W.</string>
+    <string name="msg_climb_cadence_drop">Cadence dropping. Shift lighter.</string>
+    <string name="msg_climb_summit_near">%1$dm to summit. Hold it.</string>
+    <string name="msg_climb_descent">Descending. Recover and fuel up.</string>
+    <string name="msg_multi_climb_fatigue">Climb %1$d of %2$d. HR baseline rising — pace conservatively.</string>
+
+    <!-- Coaching messages: adaptive -->
+    <string name="msg_adaptive_observing">Reading your ride. Coaching starts shortly.</string>
+    <string name="msg_adaptive_endurance">Looks like an endurance ride. Coaching active.</string>
+    <string name="msg_adaptive_recovery">Easy day. Strict Z1 ceiling today.</string>
+    <string name="msg_adaptive_unstructured">Unstructured ride detected. Basic fueling coaching active.</string>
+    <string name="msg_fuel_first_30min">30 min in. Time to start fueling.</string>
+
+    <!-- Mode detection notifications -->
+    <string name="mode_detected_workout">Workout detected. Coaching active.</string>
+    <string name="mode_detected_climb">Climb route detected. Climb coaching active.</string>
+    <string name="mode_detected_endurance">Endurance coaching active.</string>
+    <string name="mode_detected_adaptive">Observing ride. Coaching starts in 10 min.</string>
+    <string name="mode_override_applied">Mode set to %1$s.</string>
+
+    <!-- Settings screen -->
+    <string name="settings_title">PacePilot Settings</string>
+    <string name="settings_section_zones">Power &amp; HR Zones</string>
+    <string name="settings_section_alerts">Alert Preferences</string>
+    <string name="settings_section_mode">Mode Detection</string>
+    <string name="settings_save">Save</string>
+</resources>

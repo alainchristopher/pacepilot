@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ExtensionInfo
+    displayName="@string/extension_name"
+    icon="@drawable/ic_pacepilot"
+    id="pacepilot"
+    scansDevices="false">
+
+    <BonusAction
+        actionId="mode_workout"
+        displayName="@string/action_mode_workout" />
+    <BonusAction
+        actionId="mode_endurance"
+        displayName="@string/action_mode_endurance" />
+    <BonusAction
+        actionId="mode_climb"
+        displayName="@string/action_mode_climb" />
+    <BonusAction
+        actionId="mode_adaptive"
+        displayName="@string/action_mode_adaptive" />
+    <BonusAction
+        actionId="ack_fuel"
+        displayName="@string/action_ack_fuel" />
+    <BonusAction
+        actionId="silence_10min"
+        displayName="@string/action_silence" />
+
+</ExtensionInfo>

@@ -1,0 +1,12 @@
+org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+org.gradle.parallel=true
+org.gradle.caching=true
+android.useAndroidX=true
+kotlin.code.style=official
+
+# GitHub credentials for karoo-ext SDK (GitHub Packages)
+# 1. Go to https://github.com/settings/tokens/new
+# 2. Create a PAT with read:packages scope
+# 3. Fill in below:
+gpr.user=YOUR_GITHUB_USERNAME
+gpr.key=YOUR_GITHUB_PAT
