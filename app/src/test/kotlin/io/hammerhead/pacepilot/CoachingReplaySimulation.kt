@@ -354,7 +354,110 @@ class CoachingReplaySimulation {
         runSimulation("Endurance + 20-min Climb — hilly route", frames)
     }
 
-    // ─── Scenario 5: Recovery ride — rider goes too hard ─────────────────
+    // ─── Scenario 5: Base Builder (HR) 1h — HR-zone coaching ─────────────
+
+    @Test
+    fun `base builder hr workout - 10min warmup 40min active 10min cooldown`() {
+        // maxHr = 185. Zones from 5-zone model:
+        // Z2 = 61-70% → 113-129 bpm (warmup/cooldown target ~70-80%: 130-148)
+        // Z3 = 71-80% → 131-148 bpm (active target 80-90%: 148-166)
+        // Karoo HR zones from profile (simulating custom zones):
+        // Z1: 0-113, Z2: 114-130, Z3: 131-148, Z4: 149-166, Z5: 167-185
+        val hrZ2lo = 114; val hrZ2hi = 130
+        val hrZ3lo = 131; val hrZ3hi = 148
+
+        val frames = mutableListOf<RideContext>()
+
+        // 10 min warmup: target 70-80% = 130-148bpm (Z2-Z3)
+        for (sec in 0..599) {
+            val targetHr = (hrZ2lo + hrZ3hi) / 2  // 122bpm mid of warmup range
+            val hr = when {
+                sec < 120 -> 95 + (sec * 30 / 120)        // ramping up
+                sec < 300 -> 120 + (sin(sec * 0.01) * 5).toInt()  // finding warmup zone
+                else -> 127 + (sin(sec * 0.008) * 4).toInt()       // settled
+            }
+            // Power is irrelevant for HR workout — rider finds power that achieves HR
+            val power = hr * 2  // rough proxy
+            frames.add(baseHrWorkoutFrame(sec, hr, power, hrZ2lo, hrZ3hi,
+                step = 0, totalSteps = 3, phase = IntervalPhase.WARMUP,
+                elapsed = sec, remaining = 600 - sec, hrZoneBounds = listOf(0 to 113, 114 to 130, 131 to 148, 149 to 166, 167 to 185)))
+        }
+
+        // 40 min active: target 80-90% = 148-166bpm (Z3-Z4)
+        for (sec in 600..2999) {
+            val elapsedInBlock = sec - 600
+            val hr = when {
+                elapsedInBlock < 120 -> 130 + (elapsedInBlock * 20 / 120) // rising to Z3
+                elapsedInBlock < 600 -> 148 + (sin(elapsedInBlock * 0.008) * 6).toInt() // Z3 floor
+                elapsedInBlock < 1200 -> 152 + (sin(elapsedInBlock * 0.006) * 5).toInt() // settled Z3-Z4
+                elapsedInBlock < 1800 -> 158 + (sin(elapsedInBlock * 0.005) * 4).toInt() // drifting up slightly
+                else -> 162 + (sin(elapsedInBlock * 0.004) * 5).toInt() // late — hitting Z4 ceiling
+            }
+            val power = hr * 2
+            frames.add(baseHrWorkoutFrame(sec, hr, power, 148, 166,
+                step = 1, totalSteps = 3, phase = IntervalPhase.EFFORT,
+                elapsed = elapsedInBlock, remaining = 2400 - elapsedInBlock,
+                hrZoneBounds = listOf(0 to 113, 114 to 130, 131 to 148, 149 to 166, 167 to 185)))
+        }
+
+        // 10 min cooldown: target 70-80% = 130-148bpm
+        for (sec in 3000..3599) {
+            val elapsedInBlock = sec - 3000
+            val hr = when {
+                elapsedInBlock < 120 -> 158 - (elapsedInBlock * 20 / 120) // dropping from effort
+                else -> 140 - (elapsedInBlock * 10 / 600) + (sin(elapsedInBlock * 0.01) * 4).toInt()
+            }
+            val power = hr * 2
+            frames.add(baseHrWorkoutFrame(sec, hr.coerceAtLeast(90), power, hrZ2lo, hrZ3hi,
+                step = 2, totalSteps = 3, phase = IntervalPhase.COOLDOWN,
+                elapsed = elapsedInBlock, remaining = 600 - elapsedInBlock,
+                hrZoneBounds = listOf(0 to 113, 114 to 130, 131 to 148, 149 to 166, 167 to 185)))
+        }
+
+        runSimulation("Base Builder HR — 10min warmup / 40min active (148-166bpm) / 10min cooldown", frames)
+    }
+
+    private fun baseHrWorkoutFrame(
+        sec: Int, hr: Int, power: Int,
+        targetLow: Int, targetHigh: Int,
+        step: Int, totalSteps: Int, phase: IntervalPhase,
+        elapsed: Int, remaining: Int,
+        hrZoneBounds: List<Pair<Int, Int>>,
+    ): RideContext {
+        val hrZone = hrZoneBounds.indexOfFirst { (_, max) -> hr <= max }.takeIf { it >= 0 }?.plus(1) ?: 5
+        return RideContext(
+            activeMode = ActiveMode(RideMode.WORKOUT, ModeSource.AUTO_DETECTED),
+            isRecording = true,
+            rideElapsedSec = sec.toLong(),
+            ftp = ftp,
+            maxHr = maxHr,
+            powerWatts = power,
+            power5sAvg = power,
+            power30sAvg = power,
+            power3minAvg = power - 5,
+            variabilityIndex = 1.05f,
+            powerZone = ZoneCalculator.powerZone(power, ftp),
+            heartRateBpm = hr,
+            hrZone = hrZone,
+            hrZoneBounds = hrZoneBounds,
+            cadenceRpm = 85 + (sin(sec * 0.01) * 4).toInt(),
+            speedKmh = power / 10f,
+            distanceKm = sec / 100f,
+            workout = WorkoutState(
+                isActive = true,
+                currentPhase = phase,
+                currentStep = step,
+                totalSteps = totalSteps,
+                intervalElapsedSec = elapsed,
+                intervalRemainingSec = remaining,
+                targetType = TargetType.HEART_RATE,
+                targetLow = targetLow,
+                targetHigh = targetHigh,
+            )
+        )
+    }
+
+    // ─── Scenario 6: Recovery ride — rider goes too hard ─────────────────
 
     @Test
     fun `recovery ride - keeps going too hard`() {

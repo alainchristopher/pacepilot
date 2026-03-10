@@ -44,6 +44,8 @@ object RuleId {
     const val INTERVAL_COUNTDOWN = "interval_countdown"
     const val CADENCE_DROPPING = "cadence_dropping"
     const val HR_CEILING_EXCEEDED = "hr_ceiling_exceeded"
+    const val HR_BELOW_TARGET = "hr_below_target"
+    const val HR_ON_TARGET = "hr_on_target"
 
     // Workout: recovery
     const val RECOVERY_NOT_RECOVERING = "recovery_not_recovering"

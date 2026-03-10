@@ -28,6 +28,9 @@ data class RideContext(
     val hrRecoveryRate: Float = 0f,     // bpm/sec drop rate
     val hrDecouplingPct: Float = 0f,    // % power:HR ratio drift
     val maxHr: Int = 185,
+    // Karoo user profile HR zones (min/max bpm per zone, index 0 = Z1)
+    // Empty = fall back to % maxHr calculation
+    val hrZoneBounds: List<Pair<Int, Int>> = emptyList(),
 
     // Cadence
     val cadenceRpm: Int = 0,
@@ -69,3 +72,26 @@ data class RideContext(
 val RideContext.currentMode: RideMode get() = activeMode.mode
 val RideContext.isWorkoutMode: Boolean get() = currentMode == RideMode.WORKOUT
 val RideContext.isWorkoutActive: Boolean get() = workout.isActive
+
+/** True when a structured HR-based workout is actively running */
+val RideContext.isHrBasedWorkout: Boolean
+    get() = workout.isActive && workout.targetType == io.hammerhead.pacepilot.model.TargetType.HEART_RATE
+
+/**
+ * Look up the HR zone bounds for [zone] (1-indexed).
+ * Uses Karoo profile zones when available, falls back to % maxHr.
+ */
+fun RideContext.hrZoneBoundsFor(zone: Int): Pair<Int, Int> {
+    val idx = zone - 1
+    if (hrZoneBounds.size > idx && idx >= 0) return hrZoneBounds[idx]
+    // fallback: % maxHr (5-zone model)
+    val lower = when (zone) {
+        1 -> 0; 2 -> maxHr * 61 / 100; 3 -> maxHr * 71 / 100
+        4 -> maxHr * 81 / 100; 5 -> maxHr * 91 / 100; else -> 0
+    }
+    val upper = when (zone) {
+        1 -> maxHr * 60 / 100; 2 -> maxHr * 70 / 100; 3 -> maxHr * 80 / 100
+        4 -> maxHr * 90 / 100; else -> maxHr
+    }
+    return lower to upper
+}

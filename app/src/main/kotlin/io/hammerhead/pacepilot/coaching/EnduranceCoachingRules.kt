@@ -5,6 +5,7 @@ import io.hammerhead.pacepilot.model.CoachingEvent
 import io.hammerhead.pacepilot.model.CoachingPriority
 import io.hammerhead.pacepilot.model.RideContext
 import io.hammerhead.pacepilot.model.RuleId
+import io.hammerhead.pacepilot.model.isHrBasedWorkout
 import io.hammerhead.pacepilot.util.ZoneCalculator
 
 /**
@@ -19,6 +20,9 @@ object EnduranceCoachingRules {
      */
     fun zoneDrift(ctx: RideContext): CoachingEvent? {
         if (ctx.ftp <= 0) return null
+        // Don't warn about power zone when following an HR-based workout plan —
+        // higher power is expected and the HR rules will coach appropriately
+        if (ctx.isHrBasedWorkout) return null
 
         val z3Lower = ZoneCalculator.powerZoneLowerWatts(3, ctx.ftp)
         val z4Lower = ZoneCalculator.powerZoneLowerWatts(4, ctx.ftp)

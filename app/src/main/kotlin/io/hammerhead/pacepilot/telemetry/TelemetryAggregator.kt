@@ -94,7 +94,13 @@ class TelemetryAggregator(
             maxHrFromProfile = profile.maxHr
             val ftp = if (settings.ftpOverride > 0) settings.ftpOverride else ftpFromProfile
             val maxHr = if (settings.maxHrOverride > 0) settings.maxHrOverride else maxHrFromProfile
-            _context.update { it.copy(ftp = ftp, maxHr = maxHr) }
+
+            // Use Karoo's actual HR zone bounds (e.g. if user has custom zones set)
+            val hrZoneBounds = profile.heartRateZones
+                .map { zone -> zone.min to zone.max }
+
+            Timber.d("UserProfile: ftp=$ftp maxHr=$maxHr hrZones=${hrZoneBounds.size}")
+            _context.update { it.copy(ftp = ftp, maxHr = maxHr, hrZoneBounds = hrZoneBounds) }
         }
     }
 
@@ -128,7 +134,14 @@ class TelemetryAggregator(
             .collect { bpm ->
                 val ctx = _context.value
                 hrAnalyzer.onHrSample(bpm, ctx.powerWatts, ctx.rideElapsedSec, ctx.maxHr)
-                val zone = ZoneCalculator.hrZone(bpm, ctx.maxHr)
+                // Use Karoo profile zones if available, otherwise fall back to % maxHr
+                val zone = if (ctx.hrZoneBounds.isNotEmpty()) {
+                    ctx.hrZoneBounds.indexOfFirst { (_, max) -> bpm <= max }
+                        .takeIf { it >= 0 }?.plus(1)
+                        ?: ctx.hrZoneBounds.size  // above all zones = highest zone
+                } else {
+                    ZoneCalculator.hrZone(bpm, ctx.maxHr)
+                }
                 _context.update { c ->
                     c.copy(
                         heartRateBpm = bpm,

@@ -47,6 +47,11 @@ android {
     testOptions {
         unitTests {
             isIncludeAndroidResources = true
+            all { test ->
+                test.testLogging {
+                    showStandardStreams = true
+                }
+            }
         }
     }
 }

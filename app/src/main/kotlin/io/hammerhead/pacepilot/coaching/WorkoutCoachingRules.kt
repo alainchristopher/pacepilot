@@ -205,7 +205,8 @@ object WorkoutCoachingRules {
     }
 
     /**
-     * Bonus: hr_ceiling_exceeded — HR too high during HR-based workout.
+     * hr_ceiling_exceeded — HR too high during HR-based workout effort.
+     * 5bpm grace above ceiling to account for sensor lag.
      */
     fun hrCeilingExceeded(ctx: RideContext): CoachingEvent? {
         val ws = ctx.workout
@@ -213,15 +214,66 @@ object WorkoutCoachingRules {
         if (ws.targetType != TargetType.HEART_RATE) return null
 
         val ceiling = ws.targetHigh ?: return null
-        if (ctx.heartRateBpm <= ceiling + 5) return null // 5bpm grace
+        if (ctx.heartRateBpm <= ceiling + 5) return null
 
         val overBy = ctx.heartRateBpm - ceiling
         return CoachingEvent(
             ruleId = RuleId.HR_CEILING_EXCEEDED,
-            message = "HR too high. Back off slightly.",
+            message = "HR ${overBy}bpm above zone. Ease off.",
             priority = CoachingPriority.HIGH,
             alertStyle = AlertStyle.WARNING,
             suppressIfFiredInLastSec = 90,
+        )
+    }
+
+    /**
+     * hr_below_target — HR too low during HR-based workout effort.
+     * Rider isn't generating enough effort — needs to push more.
+     * Only fires after 90s (HR needs time to climb).
+     */
+    fun hrBelowTarget(ctx: RideContext): CoachingEvent? {
+        val ws = ctx.workout
+        if (!ws.isActive || ws.currentPhase != IntervalPhase.EFFORT) return null
+        if (ws.targetType != TargetType.HEART_RATE) return null
+        if (ws.intervalElapsedSec < 90) return null  // HR needs time to rise
+
+        val floor = ws.targetLow ?: return null
+        val margin = floor - (floor * 5 / 100)  // 5% below floor before alerting
+        if (ctx.heartRateBpm >= margin) return null
+
+        val belowBy = floor - ctx.heartRateBpm
+        return CoachingEvent(
+            ruleId = RuleId.HR_BELOW_TARGET,
+            message = "HR ${belowBy}bpm below zone. Pick it up.",
+            priority = CoachingPriority.MEDIUM,
+            alertStyle = AlertStyle.COACHING,
+            suppressIfFiredInLastSec = 120,
+        )
+    }
+
+    /**
+     * hr_on_target — positive reinforcement for HR-based workouts.
+     * Fires once per effort interval when HR is in the target range.
+     */
+    fun hrOnTarget(ctx: RideContext): CoachingEvent? {
+        val ws = ctx.workout
+        if (!ws.isActive || ws.currentPhase != IntervalPhase.EFFORT) return null
+        if (ws.targetType != TargetType.HEART_RATE) return null
+
+        val floor = ws.targetLow ?: return null
+        val ceiling = ws.targetHigh ?: floor
+
+        if (ctx.heartRateBpm < floor || ctx.heartRateBpm > ceiling) return null
+
+        // Only fire 90-120s into effort (HR settled)
+        if (ws.intervalElapsedSec !in 85..125) return null
+
+        return CoachingEvent(
+            ruleId = RuleId.HR_ON_TARGET,
+            message = "HR locked in at ${ctx.heartRateBpm}bpm. Hold it.",
+            priority = CoachingPriority.LOW,
+            alertStyle = AlertStyle.POSITIVE,
+            suppressIfFiredInLastSec = 300,
         )
     }
 
@@ -415,6 +467,8 @@ object WorkoutCoachingRules {
             intervalCountdown(ctx),
             cadenceDropping(ctx, minCadence),
             hrCeilingExceeded(ctx),
+            hrBelowTarget(ctx),
+            hrOnTarget(ctx),
             recoveryNotRecovering(ctx),
             hrNotDropping(ctx),
             recoveryFuelingWindow(ctx),

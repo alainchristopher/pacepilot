@@ -3,7 +3,9 @@ package io.hammerhead.pacepilot.ai
 import io.hammerhead.pacepilot.history.RideHistory
 import io.hammerhead.pacepilot.model.CoachingEvent
 import io.hammerhead.pacepilot.model.RideContext
+import io.hammerhead.pacepilot.model.TargetType
 import io.hammerhead.pacepilot.model.currentMode
+import io.hammerhead.pacepilot.model.isHrBasedWorkout
 
 /**
  * Builds Gemini prompts for coaching events.
@@ -99,17 +101,28 @@ OUTPUT RULES — NON-NEGOTIABLE:
         appendLine("## Now")
         appendLine("${ctx.rideElapsedSec / 60}min in · ${ctx.currentMode.name.lowercase().replace('_', ' ')} mode")
 
-        // Power — most important signal, always include
-        appendLine("Power: ${ctx.power5sAvg}W (5s) / ${ctx.power30sAvg}W (30s) / ${ctx.power3minAvg}W (3min) · Z${ctx.powerZone} of 7 · FTP ${ctx.ftp}W")
-
-        // HR — if available
-        if (ctx.heartRateBpm > 0) {
-            val hrLine = buildString {
-                append("HR: ${ctx.heartRateBpm} bpm · Z${ctx.hrZone} of 5")
-                if (ctx.hrRecoveryRate > 0) append(" · recovering at ${"%.2f".format(ctx.hrRecoveryRate)} bpm/s")
-                if (ctx.hrDecouplingPct > 3f) append(" · decoupling ${ctx.hrDecouplingPct.toInt()}%")
+        // For HR-based workouts, lead with HR as the primary metric
+        if (ctx.isHrBasedWorkout) {
+            if (ctx.heartRateBpm > 0) {
+                val hrLine = buildString {
+                    append("HR: ${ctx.heartRateBpm} bpm · Z${ctx.hrZone} of 5 (PRIMARY TARGET)")
+                    if (ctx.hrRecoveryRate > 0) append(" · recovering at ${"%.2f".format(ctx.hrRecoveryRate)} bpm/s")
+                    if (ctx.hrDecouplingPct > 3f) append(" · decoupling ${ctx.hrDecouplingPct.toInt()}%")
+                }
+                appendLine(hrLine)
             }
-            appendLine(hrLine)
+            appendLine("Power (secondary): ${ctx.power30sAvg}W · FTP ${ctx.ftp}W")
+        } else {
+            // Power-based: power is primary
+            appendLine("Power: ${ctx.power5sAvg}W (5s) / ${ctx.power30sAvg}W (30s) / ${ctx.power3minAvg}W (3min) · Z${ctx.powerZone} of 7 · FTP ${ctx.ftp}W")
+            if (ctx.heartRateBpm > 0) {
+                val hrLine = buildString {
+                    append("HR: ${ctx.heartRateBpm} bpm · Z${ctx.hrZone} of 5")
+                    if (ctx.hrRecoveryRate > 0) append(" · recovering at ${"%.2f".format(ctx.hrRecoveryRate)} bpm/s")
+                    if (ctx.hrDecouplingPct > 3f) append(" · decoupling ${ctx.hrDecouplingPct.toInt()}%")
+                }
+                appendLine(hrLine)
+            }
         }
 
         if (ctx.cadenceRpm > 0) appendLine("Cadence: ${ctx.cadenceRpm} rpm")
@@ -131,16 +144,21 @@ OUTPUT RULES — NON-NEGOTIABLE:
         if (ws.isActive) {
             appendLine()
             appendLine("## Interval")
+            val targetUnit = if (ws.targetType == TargetType.HEART_RATE) "bpm" else "W"
             appendLine("${ws.currentPhase.name.lowercase()} · step ${ws.currentStep + 1}/${ws.totalSteps} · ${ws.intervalElapsedSec}s elapsed / ${ws.intervalRemainingSec}s left")
             if (ws.targetLow != null || ws.targetHigh != null) {
+                val currentMetric = if (ws.targetType == TargetType.HEART_RATE) ctx.heartRateBpm else ctx.power30sAvg
                 val diff = when {
-                    ws.targetHigh != null && ctx.power30sAvg > ws.targetHigh ->
-                        "+${ctx.power30sAvg - ws.targetHigh}W above ceiling"
-                    ws.targetLow != null && ctx.power30sAvg < ws.targetLow ->
-                        "-${ws.targetLow - ctx.power30sAvg}W below floor"
+                    ws.targetHigh != null && currentMetric > ws.targetHigh + (if (ws.targetType == TargetType.HEART_RATE) 5 else ws.targetHigh * 10 / 100) ->
+                        "+${currentMetric - ws.targetHigh}$targetUnit above ceiling"
+                    ws.targetLow != null && currentMetric < ws.targetLow - (if (ws.targetType == TargetType.HEART_RATE) ws.targetLow * 5 / 100 else ws.targetLow * 10 / 100) ->
+                        "-${ws.targetLow - currentMetric}$targetUnit below floor"
                     else -> "on target"
                 }
-                appendLine("Target ${ws.targetLow ?: "?"}–${ws.targetHigh ?: "?"}W · currently $diff")
+                appendLine("Target ${ws.targetLow ?: "?"}–${ws.targetHigh ?: "?"}$targetUnit · currently $diff")
+                if (ws.targetType == TargetType.HEART_RATE) {
+                    appendLine("Note: this is an HR-based workout. Power is secondary — coach to HR zones only.")
+                }
             }
             if (ws.effortAvgPowers.size >= 2) {
                 appendLine("Effort set avgs: ${ws.effortAvgPowers.joinToString("→")}W" +
@@ -175,7 +193,9 @@ OUTPUT RULES — NON-NEGOTIABLE:
         "power_on_target" -> "Power settled in target range — reinforce"
         "interval_countdown" -> "30 seconds remaining in effort"
         "cadence_dropping" -> "Cadence well below minimum during effort"
-        "hr_ceiling_exceeded" -> "HR above HR-based workout ceiling"
+        "hr_ceiling_exceeded" -> "HR above HR-based workout ceiling — ease off"
+        "hr_below_target" -> "HR below HR-based workout floor — rider needs to push more"
+        "hr_on_target" -> "HR settled in target zone — positive reinforcement"
         "recovery_not_recovering" -> "Power still Z3+ during recovery — not backing off"
         "hr_not_dropping" -> "HR still elevated 60s into recovery"
         "recovery_fueling_window" -> "Long recovery window — good time to fuel"
