@@ -169,6 +169,21 @@ OUTPUT RULES — NON-NEGOTIABLE:
             }
         }
 
+        // Nutrition & hydration
+        if (ctx.rideElapsedSec > 1200) {
+            appendLine()
+            appendLine("## Nutrition")
+            appendLine("Carbs: ${ctx.carbsConsumedGrams}g consumed / ${ctx.carbTargetGrams}g target" +
+                if (ctx.carbDeficitGrams > 10) " · deficit ${ctx.carbDeficitGrams}g" else " · on track")
+            val msSinceEat = if (ctx.lastFuelAckEpochSec > 0)
+                (System.currentTimeMillis() / 1000 - ctx.lastFuelAckEpochSec) / 60 else -1
+            val msSinceDrink = if (ctx.lastDrinkAckEpochSec > 0)
+                (System.currentTimeMillis() / 1000 - ctx.lastDrinkAckEpochSec) / 60 else -1
+            if (msSinceEat >= 0) appendLine("Last ate: ${msSinceEat}min ago (${ctx.fuelAckCount} total)")
+            if (msSinceDrink >= 0) appendLine("Last drank: ${msSinceDrink}min ago (${ctx.drinkAckCount} total)")
+            if (msSinceEat < 0 && ctx.rideElapsedSec > 2700) appendLine("⚠ No fueling logged yet")
+        }
+
         // Ride narrative — the story so far
         val narrativeText = narrative.buildNarrative(ctx)
         if (narrativeText != null) {
@@ -204,6 +219,8 @@ OUTPUT RULES — NON-NEGOTIABLE:
         "session_complete" -> "All intervals finished, entering cooldown"
         "last_interval_motivation" -> "Final effort block of the session"
         "endurance_zone_drift" -> "Drifted from Z2 into Z3+ for more than 3 minutes"
+        "fuel_time_based" -> "Carb deficit or time-based fueling reminder"
+        "drink_reminder" -> "Hydration reminder — rider hasn't logged a drink recently"
         "fueling_reminder" -> "Elapsed time-based fueling reminder"
         "hr_decoupling_alert" -> "HR:power decoupling — cardiac drift detected"
         "late_ride_protection" -> "Pushing too hard in final portion of long ride"

@@ -258,15 +258,30 @@ class PacePilotExtension : KarooExtension("pacepilot", "1.0") {
             "mode_endurance" -> modeTransitionEngine.applyManualOverride(RideMode.ENDURANCE)
             "mode_climb" -> modeTransitionEngine.applyManualOverride(RideMode.CLIMB_FOCUSED)
             "mode_adaptive" -> modeTransitionEngine.applyManualOverride(RideMode.ADAPTIVE)
-            "ack_fuel" -> {
-                telemetryAggregator.acknowledgedFuel()
+            "ack_fuel", "ack_eat" -> {
+                val grams = settingsRepo.current.carbsPerFuelServing
+                telemetryAggregator.acknowledgedEat(grams)
                 karooSystem.dispatch(
                     InRideAlert(
-                        id = "pp_fuel_ack",
+                        id = "pp_eat_ack",
                         icon = R.drawable.ic_pacepilot,
-                        title = "Fueling",
-                        detail = "Fueled. Keep it up.",
+                        title = "Fuel Up",
+                        detail = "+${grams}g carbs logged.",
                         autoDismissMs = 4_000,
+                        backgroundColor = R.color.alert_bg_fuel,
+                        textColor = R.color.alert_text_fuel,
+                    )
+                )
+            }
+            "ack_drink" -> {
+                telemetryAggregator.acknowledgedDrink()
+                karooSystem.dispatch(
+                    InRideAlert(
+                        id = "pp_drink_ack",
+                        icon = R.drawable.ic_pacepilot,
+                        title = "Hydration",
+                        detail = "Drink logged.",
+                        autoDismissMs = 3_000,
                         backgroundColor = R.color.alert_bg_fuel,
                         textColor = R.color.alert_text_fuel,
                     )

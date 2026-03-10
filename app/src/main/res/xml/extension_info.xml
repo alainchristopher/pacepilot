@@ -18,8 +18,11 @@
         actionId="mode_adaptive"
         displayName="@string/action_mode_adaptive" />
     <BonusAction
-        actionId="ack_fuel"
-        displayName="@string/action_ack_fuel" />
+        actionId="ack_eat"
+        displayName="@string/action_ack_eat" />
+    <BonusAction
+        actionId="ack_drink"
+        displayName="@string/action_ack_drink" />
     <BonusAction
         actionId="silence_10min"
         displayName="@string/action_silence" />

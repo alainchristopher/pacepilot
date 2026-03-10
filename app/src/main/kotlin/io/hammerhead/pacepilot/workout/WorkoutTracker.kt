@@ -28,11 +28,17 @@ class WorkoutTracker {
      * Feed updated WorkoutState; returns the state enriched with type classification.
      * Emits transition events when step changes.
      */
+    private var skippedDetected = false
+
     fun update(state: WorkoutState, ftp: Int): WorkoutState {
         val currentStep = state.currentStep
         val currentPhase = state.currentPhase
 
         if (currentStep != lastStep && lastStep >= 0) {
+            // Detect skip: step jumped by more than 1 (rider used Karoo skip/rewind)
+            val stepDelta = currentStep - lastStep
+            skippedDetected = stepDelta > 1 || stepDelta < 0
+
             _transitionEvents.tryEmit(
                 IntervalTransitionEvent(
                     fromPhase = lastPhase,
@@ -54,10 +60,18 @@ class WorkoutTracker {
         return state.copy(workoutType = classifiedType)
     }
 
+    /** True if the last step change was a skip (jumped by >1 or went backwards) */
+    fun wasSkipped(): Boolean {
+        val v = skippedDetected
+        skippedDetected = false
+        return v
+    }
+
     fun reset() {
         lastStep = -1
         lastPhase = IntervalPhase.UNKNOWN
         classifiedType = WorkoutType.UNKNOWN
+        skippedDetected = false
     }
 
     /** True if the workout has just completed (was active, now step == total-1 and remaining==0) */

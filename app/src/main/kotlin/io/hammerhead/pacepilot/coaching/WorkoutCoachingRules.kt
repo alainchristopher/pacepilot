@@ -68,16 +68,16 @@ object WorkoutCoachingRules {
         // Only fire if effort is within 90 seconds
         if (ws.intervalRemainingSec > 90) return null
 
-        // Need carb deficit data from NomRide; skip if not available
-        val deficit = ctx.carbDeficitGrams ?: return null
-        if (deficit < 10) return null // threshold — at least 10g deficit
+        val deficit = ctx.carbDeficitGrams
+        if (deficit < 10) return null
 
-        val timeToFuel = ctx.timeSinceLastFuelSec?.let { it > 1200 } ?: false // 20min since last fuel
-        if (!timeToFuel && deficit < 20) return null // low urgency if recently fueled
+        val sinceLastEat = if (ctx.lastFuelAckEpochSec > 0)
+            System.currentTimeMillis() / 1000 - ctx.lastFuelAckEpochSec else ctx.rideElapsedSec
+        if (sinceLastEat < 1200 && deficit < 20) return null // recently fueled, low deficit
 
         return CoachingEvent(
             ruleId = RuleId.PRE_INTERVAL_FUELING,
-            message = "Fuel now. Hard effort coming.",
+            message = "Fuel now. ${deficit}g deficit. Hard effort coming.",
             priority = CoachingPriority.HIGH,
             alertStyle = AlertStyle.FUEL,
             suppressIfFiredInLastSec = 300,
@@ -333,21 +333,21 @@ object WorkoutCoachingRules {
         val ws = ctx.workout
         if (!ws.isActive || ws.currentPhase != IntervalPhase.RECOVERY) return null
 
-        // Only in meaningful recovery windows (>90s)
+        // Only in meaningful recovery windows (>60s remaining)
         if (ws.intervalRemainingSec < 60) return null
 
-        // Don't prompt if recently fueled
-        val timeSinceFuel = ctx.timeSinceLastFuelSec
-        if (timeSinceFuel != null && timeSinceFuel < 1200) return null // 20min since last
-        val sinceAck = System.currentTimeMillis() / 1000 - ctx.lastFuelingAckSec
-        if (sinceAck < 1200) return null
+        // Don't prompt if recently fueled (within 20min)
+        val sinceLastEat = if (ctx.lastFuelAckEpochSec > 0)
+            System.currentTimeMillis() / 1000 - ctx.lastFuelAckEpochSec else ctx.rideElapsedSec
+        if (sinceLastEat < 1200) return null
 
         // Fire in the middle of recovery (not at start/end)
         if (ws.intervalElapsedSec !in 30..90) return null
 
+        val deficitMsg = if (ctx.carbDeficitGrams > 10) " ${ctx.carbDeficitGrams}g deficit." else ""
         return CoachingEvent(
             ruleId = RuleId.RECOVERY_FUELING_WINDOW,
-            message = "Good time to fuel. Take a gel.",
+            message = "Good time to fuel.${deficitMsg}",
             priority = CoachingPriority.MEDIUM,
             alertStyle = AlertStyle.FUEL,
             suppressIfFiredInLastSec = 300,

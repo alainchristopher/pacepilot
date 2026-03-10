@@ -43,11 +43,11 @@ class RideNarrativeTest {
         val ackTimeSec = System.currentTimeMillis() / 1000
         val ctx = TestHelpers.buildContext(RideMode.ENDURANCE, 200).copy(
             rideElapsedSec = 2000L,
-            lastFuelingAckSec = ackTimeSec,
+            lastFuelAckEpochSec = ackTimeSec,
         )
         // Pre-ack state
         repeat(1999) { sec ->
-            narrative.onContext(ctx.copy(rideElapsedSec = sec.toLong(), lastFuelingAckSec = 0L))
+            narrative.onContext(ctx.copy(rideElapsedSec = sec.toLong(), lastFuelAckEpochSec = 0L))
         }
         // Ack happens
         narrative.onContext(ctx)

@@ -189,7 +189,7 @@ class WorkoutCoachingRulesTest {
     @Test
     fun `recoveryFuelingWindow fires in 30-90s of recovery with enough time remaining`() {
         val ctx = recoveryContext(remainingSec = 120, elapsedSec = 50)
-            .copy(timeSinceLastFuelSec = 2000L)
+            .copy(lastFuelAckEpochSec = 0L)
         val event = WorkoutCoachingRules.recoveryFuelingWindow(ctx)
         assertNotNull(event)
         assertEquals(RuleId.RECOVERY_FUELING_WINDOW, event!!.ruleId)
@@ -198,7 +198,7 @@ class WorkoutCoachingRulesTest {
     @Test
     fun `recoveryFuelingWindow does NOT fire if recently fueled`() {
         val ctx = recoveryContext(remainingSec = 120, elapsedSec = 50)
-            .copy(timeSinceLastFuelSec = 500L)
+            .copy(lastFuelAckEpochSec = System.currentTimeMillis() / 1000 - 500)
         assertNull(WorkoutCoachingRules.recoveryFuelingWindow(ctx))
     }
 

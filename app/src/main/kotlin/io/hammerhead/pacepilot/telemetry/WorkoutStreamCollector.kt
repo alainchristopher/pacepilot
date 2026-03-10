@@ -31,6 +31,10 @@ class WorkoutStreamCollector(
     private val _isActive = MutableStateFlow(false)
     val isActive: StateFlow<Boolean> = _isActive.asStateFlow()
 
+    // Track interval start to derive elapsed time (SDK only gives remaining)
+    private var intervalStartStep = -1
+    private var intervalDurationAtStart = 0
+
     private fun streamValue(typeId: String) =
         karooSystem.streamDataFlow(typeId).mapNotNull { s ->
             (s as? StreamState.Streaming)?.dataPoint?.singleValue
@@ -115,13 +119,21 @@ class WorkoutStreamCollector(
         // Infer interval phase from step position and target zone
         val phase = inferPhase(currentStep, totalSteps, powerLow, powerHigh)
 
-        Timber.d("WorkoutStream: step=$currentStep/$totalSteps remaining=${remainingSec}s phase=$phase")
+        // Derive elapsed: when step changes, capture remaining as interval duration
+        if (currentStep != intervalStartStep) {
+            intervalStartStep = currentStep
+            intervalDurationAtStart = remainingSec
+        }
+        val elapsedSec = (intervalDurationAtStart - remainingSec).coerceAtLeast(0)
+
+        Timber.d("WorkoutStream: step=$currentStep/$totalSteps elapsed=${elapsedSec}s remaining=${remainingSec}s phase=$phase")
 
         return WorkoutState(
             isActive = isActive,
             currentStep = currentStep,
             totalSteps = totalSteps,
             currentPhase = phase,
+            intervalElapsedSec = elapsedSec,
             intervalRemainingSec = remainingSec,
             targetType = targetType,
             targetLow = if (targetType == TargetType.POWER) powerLow else hrLow,

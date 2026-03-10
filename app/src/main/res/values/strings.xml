@@ -8,7 +8,8 @@
     <string name="action_mode_endurance">Mode: Endurance</string>
     <string name="action_mode_climb">Mode: Climb</string>
     <string name="action_mode_adaptive">Mode: Adaptive</string>
-    <string name="action_ack_fuel">Fueled ✓</string>
+    <string name="action_ack_eat">Ate ✓</string>
+    <string name="action_ack_drink">Drank ✓</string>
     <string name="action_silence">Silence 10 min</string>
 
     <!-- Settings labels -->

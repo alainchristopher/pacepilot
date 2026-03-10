@@ -79,8 +79,27 @@ class TelemetryAggregator(
         _context.update { it.copy(silencedUntilSec = untilSec) }
     }
 
-    fun acknowledgedFuel() {
-        _context.update { it.copy(lastFuelingAckSec = System.currentTimeMillis() / 1000) }
+    fun acknowledgedEat(gramsPerServing: Int) {
+        val nowSec = System.currentTimeMillis() / 1000
+        _context.update { c ->
+            val newTotal = c.carbsConsumedGrams + gramsPerServing
+            c.copy(
+                carbsConsumedGrams = newTotal,
+                carbDeficitGrams = (c.carbTargetGrams - newTotal).coerceAtLeast(0),
+                lastFuelAckEpochSec = nowSec,
+                fuelAckCount = c.fuelAckCount + 1,
+            )
+        }
+    }
+
+    fun acknowledgedDrink() {
+        val nowSec = System.currentTimeMillis() / 1000
+        _context.update { c ->
+            c.copy(
+                lastDrinkAckEpochSec = nowSec,
+                drinkAckCount = c.drinkAckCount + 1,
+            )
+        }
     }
 
     // ------------------------------------------------------------------
@@ -311,6 +330,7 @@ class TelemetryAggregator(
     }
 
     private suspend fun tickLoop() {
+        val carbRate = settingsRepo.current.carbTargetGramsPerHour
         while (true) {
             val nowSec = System.currentTimeMillis() / 1000
             val elapsed = nowSec - rideStartEpochSec
@@ -318,11 +338,17 @@ class TelemetryAggregator(
                 (_context.value.minutesInZ1Sustained + (1f / 60f)).coerceAtMost(30f)
             } else 0f
 
+            // Compute target carbs based on elapsed time
+            val elapsedHours = elapsed / 3600f
+            val targetCarbs = (elapsedHours * carbRate).toInt()
+
             _context.update { c ->
                 c.copy(
                     rideElapsedSec = elapsed,
                     isRecording = true,
                     minutesInZ1Sustained = z1Minutes,
+                    carbTargetGrams = targetCarbs,
+                    carbDeficitGrams = (targetCarbs - c.carbsConsumedGrams).coerceAtLeast(0),
                 )
             }
 

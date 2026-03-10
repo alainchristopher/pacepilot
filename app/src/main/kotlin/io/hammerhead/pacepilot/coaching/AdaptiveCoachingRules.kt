@@ -86,7 +86,7 @@ object AdaptiveCoachingRules {
         if (ctx.currentMode != RideMode.ADAPTIVE && ctx.currentMode != RideMode.RECOVERY) return null
         if (ctx.rideElapsedSec < 1800 || ctx.rideElapsedSec > 1860) return null // 30-31 min window
 
-        val sinceAck = System.currentTimeMillis() / 1000 - ctx.lastFuelingAckSec
+        val sinceAck = System.currentTimeMillis() / 1000 - ctx.lastFuelAckEpochSec
         if (sinceAck < 1800) return null // already fueled
 
         return CoachingEvent(

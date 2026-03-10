@@ -56,13 +56,17 @@ data class RideContext(
     // Workout state
     val workout: WorkoutState = WorkoutState(),
 
-    // Fueling (NomRide integration — optional)
-    val carbDeficitGrams: Int? = null,      // null if NomRide not available
-    val timeSinceLastFuelSec: Long? = null,
+    // Fueling & hydration
+    val carbsConsumedGrams: Int = 0,        // total carbs consumed this ride
+    val carbTargetGrams: Int = 0,           // target carbs for elapsed time
+    val carbDeficitGrams: Int = 0,          // target - consumed (positive = deficit)
+    val lastFuelAckEpochSec: Long = 0L,     // last time rider tapped "Ate"
+    val lastDrinkAckEpochSec: Long = 0L,    // last time rider tapped "Drank"
+    val fuelAckCount: Int = 0,              // how many times rider has eaten
+    val drinkAckCount: Int = 0,             // how many times rider has drunk
 
     // Silence / suppression
     val silencedUntilSec: Long = 0L,        // epoch second, 0 = not silenced
-    val lastFuelingAckSec: Long = 0L,       // when rider last confirmed fueling
 
     // Computed helpers (derived, not from streams)
     val inFirstIntervalOfSession: Boolean = false,

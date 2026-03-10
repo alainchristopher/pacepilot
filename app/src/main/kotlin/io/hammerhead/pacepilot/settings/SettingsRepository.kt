@@ -32,6 +32,9 @@ class SettingsRepository(context: Context) {
             .putInt(KEY_MIN_CADENCE, settings.minEffortCadenceRpm)
             .putString(KEY_LLM_PROVIDER, settings.llmProvider.name)
             .putString(KEY_GEMINI_KEY, settings.geminiApiKey)
+            .putInt(KEY_CARB_TARGET_GPH, settings.carbTargetGramsPerHour)
+            .putInt(KEY_CARBS_PER_SERVING, settings.carbsPerFuelServing)
+            .putInt(KEY_DRINK_INTERVAL_MIN, settings.drinkReminderMinutes)
             .apply()
         _settings.value = settings
     }
@@ -53,6 +56,9 @@ class SettingsRepository(context: Context) {
             runCatching { LlmProvider.valueOf(it) }.getOrNull()
         } ?: LlmProvider.DISABLED,
         geminiApiKey = prefs.getString(KEY_GEMINI_KEY, "") ?: "",
+        carbTargetGramsPerHour = prefs.getInt(KEY_CARB_TARGET_GPH, 60),
+        carbsPerFuelServing = prefs.getInt(KEY_CARBS_PER_SERVING, 25),
+        drinkReminderMinutes = prefs.getInt(KEY_DRINK_INTERVAL_MIN, 20),
     )
 
     companion object {
@@ -69,5 +75,8 @@ class SettingsRepository(context: Context) {
         private const val KEY_MIN_CADENCE = "min_cadence"
         private const val KEY_LLM_PROVIDER = "llm_provider"
         private const val KEY_GEMINI_KEY = "gemini_api_key"
+        private const val KEY_CARB_TARGET_GPH = "carb_target_gph"
+        private const val KEY_CARBS_PER_SERVING = "carbs_per_serving"
+        private const val KEY_DRINK_INTERVAL_MIN = "drink_interval_min"
     }
 }

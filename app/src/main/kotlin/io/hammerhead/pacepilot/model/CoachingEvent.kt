@@ -63,6 +63,7 @@ object RuleId {
     const val EARLY_RIDE_CHECK = "early_ride_check"
     const val ZONE_DRIFT = "zone_drift"
     const val FUEL_TIME_BASED = "fuel_time_based"
+    const val DRINK_REMINDER = "drink_reminder"
     const val HR_DECOUPLING = "hr_decoupling"
     const val PROTECT_LAST_HOUR = "protect_last_hour"
     const val PACING_CONSISTENT = "pacing_consistent"

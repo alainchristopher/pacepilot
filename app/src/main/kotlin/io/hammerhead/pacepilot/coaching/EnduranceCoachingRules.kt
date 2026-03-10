@@ -44,36 +44,59 @@ object EnduranceCoachingRules {
     }
 
     /**
-     * Time-based fueling reminder.
-     * Every 30-45 min, prompt to eat/drink.
+     * Carb-deficit-aware fueling reminder.
+     * Fires when carb deficit exceeds threshold, or time-based fallback every 30-45 min.
      */
     fun fuelTimeBasedReminder(ctx: RideContext): CoachingEvent? {
         if (ctx.rideElapsedSec < 1800) return null // min 30 min before first prompt
 
-        // If NomRide is available, defer to its data
-        if (ctx.carbDeficitGrams != null) {
-            val deficit = ctx.carbDeficitGrams
-            if (deficit < 15) return null // deficit not significant enough
+        val nowSec = ctx.rideElapsedSec + (System.currentTimeMillis() / 1000 - ctx.rideElapsedSec)
+        val sinceLastEat = if (ctx.lastFuelAckEpochSec > 0)
+            System.currentTimeMillis() / 1000 - ctx.lastFuelAckEpochSec else ctx.rideElapsedSec
+        val minInterval = if (ctx.rideElapsedSec > 7200) 1800L else 2700L
+
+        // Deficit-based: fire if deficit > 15g AND haven't eaten recently
+        if (ctx.carbDeficitGrams > 15 && sinceLastEat >= 1200) {
+            return CoachingEvent(
+                ruleId = RuleId.FUEL_TIME_BASED,
+                message = "Carb deficit ${ctx.carbDeficitGrams}g. Eat now.",
+                priority = CoachingPriority.HIGH,
+                alertStyle = AlertStyle.FUEL,
+                suppressIfFiredInLastSec = 1200,
+            )
         }
 
-        // Time since last ack
-        val sinceAck = System.currentTimeMillis() / 1000 - ctx.lastFuelingAckSec
-        val timeSinceFuel = ctx.timeSinceLastFuelSec
-        val minInterval = if (ctx.rideElapsedSec > 7200) 1800L else 2700L // more often in long rides
-
-        val shouldFire = when {
-            timeSinceFuel != null -> timeSinceFuel >= minInterval
-            sinceAck >= minInterval -> true
-            else -> false
-        }
-        if (!shouldFire) return null
+        // Time-based fallback
+        if (sinceLastEat < minInterval) return null
 
         return CoachingEvent(
             ruleId = RuleId.FUEL_TIME_BASED,
-            message = "Time to fuel. Take something.",
+            message = "Time to eat. ${ctx.carbsConsumedGrams}g so far.",
             priority = CoachingPriority.MEDIUM,
             alertStyle = AlertStyle.FUEL,
             suppressIfFiredInLastSec = minInterval.toInt(),
+        )
+    }
+
+    /**
+     * Hydration reminder — separate from fuel.
+     * Fires every [drinkInterval] minutes if rider hasn't acknowledged a drink.
+     */
+    fun drinkReminder(ctx: RideContext, drinkIntervalMin: Int = 20): CoachingEvent? {
+        if (ctx.rideElapsedSec < 900) return null // min 15 min before first prompt
+
+        val sinceLastDrink = if (ctx.lastDrinkAckEpochSec > 0)
+            System.currentTimeMillis() / 1000 - ctx.lastDrinkAckEpochSec else ctx.rideElapsedSec
+        val intervalSec = drinkIntervalMin * 60L
+
+        if (sinceLastDrink < intervalSec) return null
+
+        return CoachingEvent(
+            ruleId = RuleId.DRINK_REMINDER,
+            message = "Take a drink.",
+            priority = CoachingPriority.LOW,
+            alertStyle = AlertStyle.FUEL,
+            suppressIfFiredInLastSec = intervalSec.toInt(),
         )
     }
 
@@ -164,11 +187,12 @@ object EnduranceCoachingRules {
         )
     }
 
-    fun evaluateAll(ctx: RideContext): List<CoachingEvent> =
+    fun evaluateAll(ctx: RideContext, drinkIntervalMin: Int = 20): List<CoachingEvent> =
         listOfNotNull(
             earlyRideCheck(ctx),
             zoneDrift(ctx),
             fuelTimeBasedReminder(ctx),
+            drinkReminder(ctx, drinkIntervalMin),
             hrDecoupling(ctx),
             protectLastHour(ctx),
             pacingConsistent(ctx),

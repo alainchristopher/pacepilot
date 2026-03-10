@@ -353,7 +353,7 @@ class RideScenarioTest {
     fun `live prompt without fueling acknowledgment warns at 45min`() {
         val ctx = TestHelpers.buildContext(RideMode.ENDURANCE, 200).copy(
             rideElapsedSec = 2700L, // 45 min
-            lastFuelingAckSec = 0L,
+            lastFuelAckEpochSec = 0L,
         )
 
         val narrative = RideNarrative()

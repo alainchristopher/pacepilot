@@ -93,8 +93,8 @@ class RideNarrative {
         }
 
         // Fueling ack tracking
-        if (ctx.lastFuelingAckSec > lastFuelAckEpochSec) {
-            lastFuelAckEpochSec = ctx.lastFuelingAckSec
+        if (ctx.lastFuelAckEpochSec > lastFuelAckEpochSec) {
+            lastFuelAckEpochSec = ctx.lastFuelAckEpochSec
             fuelAckCount++
             logEvent("Fueled (x$fuelAckCount total)", elapsed)
         }

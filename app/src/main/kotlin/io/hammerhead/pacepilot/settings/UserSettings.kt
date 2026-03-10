@@ -28,6 +28,13 @@ data class UserSettings(
     /** Min carb deficit (grams) before pre-effort fueling prompt fires */
     val fuelingAlertThresholdGrams: Int = 10,
 
+    /** Target carb intake g/hr (40-60 endurance, 60-90 intervals) */
+    val carbTargetGramsPerHour: Int = 60,
+    /** Estimated grams per fuel serving (gel ≈25, bar ≈40, chew ≈8) */
+    val carbsPerFuelServing: Int = 25,
+    /** Hydration reminder interval in minutes */
+    val drinkReminderMinutes: Int = 20,
+
     /** Gradient threshold (%) to detect climb route */
     val climbRouteGradientThresholdPct: Float = 4f,
     /** Min elevation gain (m) to classify route as climb-focused */
