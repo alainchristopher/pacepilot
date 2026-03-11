@@ -30,7 +30,7 @@ object AdaptiveCoachingRules {
 
         return CoachingEvent(
             ruleId = RuleId.ADAPTIVE_OBSERVING,
-            message = "Reading ride. Coaching starts soon.",
+            message = "Reading ride. Coach starting.",
             priority = CoachingPriority.INFO,
             alertStyle = AlertStyle.INFO,
             suppressIfFiredInLastSec = 3600, // once per ride
@@ -53,7 +53,7 @@ object AdaptiveCoachingRules {
 
         return CoachingEvent(
             ruleId = RuleId.ADAPTIVE_ENDURANCE,
-            message = "Endurance ride. Coaching active.",
+            message = "Endurance. Coaching active.",
             priority = CoachingPriority.INFO,
             alertStyle = AlertStyle.INFO,
             suppressIfFiredInLastSec = 3600,
@@ -72,7 +72,7 @@ object AdaptiveCoachingRules {
 
         return CoachingEvent(
             ruleId = RuleId.ADAPTIVE_UNSTRUCTURED,
-            message = "Unstructured ride. Fueling coach on.",
+            message = "Free ride. Fuel coach on.",
             priority = CoachingPriority.INFO,
             alertStyle = AlertStyle.INFO,
             suppressIfFiredInLastSec = 3600,
@@ -92,7 +92,7 @@ object AdaptiveCoachingRules {
 
         return CoachingEvent(
             ruleId = RuleId.FUEL_FIRST_30MIN,
-            message = "30 min in. Time to start fueling.",
+            message = "30min in. Time to fuel.",
             priority = CoachingPriority.MEDIUM,
             alertStyle = AlertStyle.FUEL,
             suppressIfFiredInLastSec = 3600,
@@ -114,7 +114,7 @@ object AdaptiveCoachingRules {
 
         return CoachingEvent(
             ruleId = RuleId.ADAPTIVE_RECOVERY,
-            message = "Too hard. Recovery = Z1. Ease off.",
+            message = "Too hard. Recovery = Z1.",
             priority = CoachingPriority.HIGH,
             alertStyle = AlertStyle.WARNING,
             suppressIfFiredInLastSec = 180,

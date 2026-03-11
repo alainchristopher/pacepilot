@@ -36,7 +36,7 @@ object EnduranceCoachingRules {
         val pct = ctx.power3minAvg * 100 / ctx.ftp
         return CoachingEvent(
             ruleId = RuleId.ZONE_DRIFT,
-            message = "Drifting into tempo. Back to Z2.",
+            message = "Drifting to tempo. Back to Z2.",
             priority = CoachingPriority.MEDIUM,
             alertStyle = AlertStyle.COACHING,
             suppressIfFiredInLastSec = 300, // max once per 5 min

@@ -193,8 +193,8 @@ class CoachingEngine(
         }
 
     private fun dispatch(event: CoachingEvent, message: String) {
-        // Karoo's InRideAlert detail field wraps/truncates beyond ~40 chars
-        val detail = if (message.length > 40) message.take(37) + "…" else message
+        // Karoo screen truncates around 30 chars on the narrow display
+        val detail = if (message.length > 30) message.take(28) + "…" else message
         Timber.i("CoachingEngine: rule=${event.ruleId} priority=${event.priority} → \"$detail\"")
         val (bgColor, textColor, title) = alertAppearance(event.alertStyle)
         karooSystem.dispatch(

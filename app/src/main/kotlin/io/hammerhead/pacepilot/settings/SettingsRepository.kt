@@ -16,7 +16,10 @@ class SettingsRepository(context: Context) {
     private val _settings = MutableStateFlow(load())
     val settings: StateFlow<UserSettings> = _settings.asStateFlow()
 
-    val current: UserSettings get() = _settings.value
+    // Always read from prefs so the service picks up settings saved by the activity
+    // (they run in the same process on Karoo, but the activity's save() only updates
+    //  that instance's StateFlow — not the service's separate instance)
+    val current: UserSettings get() = load()
 
     fun save(settings: UserSettings) {
         prefs.edit()

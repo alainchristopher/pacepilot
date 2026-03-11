@@ -35,7 +35,7 @@ object ClimbCoachingRules {
         val multiClimbMsg = if (ctx.totalClimbsOnRoute > 1) {
             "Climb ${ctx.climbNumber}/${ctx.totalClimbsOnRoute}. Settle in."
         } else {
-            "Climb ahead. Settle in, don't blow up."
+            "Climb ahead. Settle in."
         }
 
         return CoachingEvent(
@@ -65,7 +65,7 @@ object ClimbCoachingRules {
         val overBy = ctx.power30sAvg - sweetSpotCeiling
         return CoachingEvent(
             ruleId = RuleId.CLIMB_POWER_CEILING,
-            message = "Too hard for a long climb. Drop ${overBy}W.",
+            message = "Long climb. Back off ${overBy}W.",
             priority = CoachingPriority.HIGH,
             alertStyle = AlertStyle.WARNING,
             suppressIfFiredInLastSec = 180,
@@ -139,7 +139,7 @@ object ClimbCoachingRules {
 
         return CoachingEvent(
             ruleId = RuleId.MULTI_CLIMB_FATIGUE,
-            message = "Climb ${ctx.climbNumber}/${ctx.totalClimbsOnRoute}. HR rising. Pace it.",
+            message = "Climb ${ctx.climbNumber}/${ctx.totalClimbsOnRoute}. HR up. Pace it.",
             priority = CoachingPriority.HIGH,
             alertStyle = AlertStyle.WARNING,
             suppressIfFiredInLastSec = 600,

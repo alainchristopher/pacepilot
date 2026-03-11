@@ -44,10 +44,10 @@ object WorkoutCoachingRules {
         val isFirst = ctx.inFirstIntervalOfSession
         val message = if (isFirst) {
             when (ws.workoutType) {
-                WorkoutType.VO2_MAX -> "First rep. Go hard — VO2max."
-                WorkoutType.THRESHOLD -> "First block. Don't overcook early."
+                WorkoutType.VO2_MAX -> "First rep. Go hard."
+                WorkoutType.THRESHOLD -> "First block. Don't overcook."
                 WorkoutType.RECOVERY_RIDE -> "Easy effort. Stay Z1."
-                else -> "First block. Settle in, don't overcook."
+                else -> "First block. Settle in."
             }
         } else {
             "Effort in ${remainingSec}s. Get ready."
@@ -88,7 +88,7 @@ object WorkoutCoachingRules {
 
         return CoachingEvent(
             ruleId = RuleId.PRE_INTERVAL_FUELING,
-            message = "Fuel now. ${deficit}g deficit. Hard effort coming.",
+            message = "Eat now. ${deficit}g deficit.",
             priority = CoachingPriority.HIGH,
             alertStyle = AlertStyle.FUEL,
             suppressIfFiredInLastSec = 300,
@@ -119,12 +119,12 @@ object WorkoutCoachingRules {
 
         val overBy = avg30s - ceiling
         val message = when (ws.workoutType) {
-            WorkoutType.THRESHOLD -> "Back off. ${overBy}W over — precision matters."
-            WorkoutType.SWEET_SPOT -> "Ease back. ${overBy}W above sweet spot."
+            WorkoutType.THRESHOLD -> "Back off. ${overBy}W over ceiling."
+            WorkoutType.SWEET_SPOT -> "Ease back. ${overBy}W too high."
             WorkoutType.VO2_MAX -> "Too high. Drop ${overBy}W."
-            WorkoutType.OVER_UNDER -> "Over phase done. Drop ${overBy}W."
-            WorkoutType.RECOVERY_RIDE -> "Too hard. ${overBy}W over Z1. Ease off."
-            else -> "Ease back. ${overBy}W above target."
+            WorkoutType.OVER_UNDER -> "Drop ${overBy}W. Over phase done."
+            WorkoutType.RECOVERY_RIDE -> "${overBy}W over Z1. Ease off."
+            else -> "Ease back. ${overBy}W over target."
         }
 
         return CoachingEvent(
@@ -161,12 +161,12 @@ object WorkoutCoachingRules {
 
         val belowBy = floor - avg30s
         val message = when (ws.workoutType) {
-            WorkoutType.VO2_MAX -> "Push harder. ${belowBy}W below. Dig in."
-            WorkoutType.THRESHOLD -> "More power. ${belowBy}W below target."
-            WorkoutType.SWEET_SPOT -> "Lift it. ${belowBy}W below sweet spot."
-            WorkoutType.ENDURANCE_SURGES -> "Surge — ${belowBy}W below. Go."
-            WorkoutType.OVER_UNDER -> "Under phase — hold ${belowBy}W down."
-            else -> "Push harder. ${belowBy}W below target."
+            WorkoutType.VO2_MAX -> "Dig in. ${belowBy}W below target."
+            WorkoutType.THRESHOLD -> "More power. ${belowBy}W low."
+            WorkoutType.SWEET_SPOT -> "Lift it. ${belowBy}W below."
+            WorkoutType.ENDURANCE_SURGES -> "Surge — up ${belowBy}W. Go."
+            WorkoutType.OVER_UNDER -> "Under phase. Hold ${belowBy}W low."
+            else -> "Push. ${belowBy}W below target."
         }
 
         // OVER_UNDER: being below floor in the "under" sub-phase is intentional.
@@ -271,7 +271,7 @@ object WorkoutCoachingRules {
         if (ctx.cadenceRpm > minCadence * 80 / 100) return null // must be hard drop
 
         val message = when (ws.workoutType) {
-            WorkoutType.VO2_MAX -> "Cadence dropping. Spin — ${minCadence}+ rpm."
+            WorkoutType.VO2_MAX -> "Spin up. ${minCadence}+ rpm."
             WorkoutType.THRESHOLD -> "Shift lighter. Cadence dropping."
             WorkoutType.SWEET_SPOT -> "Keep cadence up. Shift lighter."
             else -> "Cadence dropping. Shift lighter."
@@ -299,8 +299,8 @@ object WorkoutCoachingRules {
 
         val overBy = ctx.heartRateBpm - ceiling
         val message = when (ws.workoutType) {
-            WorkoutType.RECOVERY_RIDE -> "Too hard. ${overBy}bpm above Z1. Back off."
-            WorkoutType.ENDURANCE_SURGES -> "Post-surge HR high. Settle to base."
+            WorkoutType.RECOVERY_RIDE -> "${overBy}bpm above Z1. Ease off."
+            WorkoutType.ENDURANCE_SURGES -> "Post-surge HR high. Settle down."
             else -> "HR ${overBy}bpm above zone. Ease off."
         }
 
@@ -387,9 +387,9 @@ object WorkoutCoachingRules {
 
         // VO2max recovery quality is critical — use sharper message
         val message = when (ws.workoutType) {
-            WorkoutType.VO2_MAX -> "Recover. Next rep needs you fresh. Z1."
-            WorkoutType.THRESHOLD -> "Drop power now. Threshold needs real rest."
-            else -> "Actually recover. Drop to Z1."
+            WorkoutType.VO2_MAX -> "Recover. Next rep needs you fresh."
+            WorkoutType.THRESHOLD -> "Drop power. Threshold needs rest."
+            else -> "Recover. Drop to Z1."
         }
 
         return CoachingEvent(
@@ -471,7 +471,7 @@ object WorkoutCoachingRules {
         if (ws.effortAvgPowers.size < policy.fadingTrendMinSets) return null
 
         val message = when (ws.workoutType) {
-            WorkoutType.VO2_MAX -> "Power fading rep-to-rep. Reassess after this one."
+            WorkoutType.VO2_MAX -> "Power fading. Reassess after this."
             WorkoutType.THRESHOLD -> "Power fading. Consider stopping."
             WorkoutType.SWEET_SPOT -> "Power fading. Reduce intensity."
             else -> "Power fading. Stop after this rep."
@@ -497,9 +497,9 @@ object WorkoutCoachingRules {
         if (ws.recoveryDropRates.size < 2) return null
 
         val message = when (ws.workoutType) {
-            WorkoutType.VO2_MAX -> "Recovery slowing. Quality degrading — stop soon."
-            WorkoutType.THRESHOLD -> "Recovery slowing. Cut or reduce 5%."
-            else -> "Recovery slowing. Cut session or reduce load."
+            WorkoutType.VO2_MAX -> "Recovery slowing. Stop soon."
+            WorkoutType.THRESHOLD -> "Recovery slowing. Cut or -5%."
+            else -> "Recovery slowing. Reduce load."
         }
 
         return CoachingEvent(
@@ -523,14 +523,14 @@ object WorkoutCoachingRules {
 
         val completedCount = ws.completedEffortCount
         val msg = when {
-            completedCount <= 0 -> "Done. Easy riding from here."
+            completedCount <= 0 -> "Done. Easy from here."
             ws.workoutType == WorkoutType.VO2_MAX ->
-                "VO2max done. ${completedCount} reps. Fuel now."
+                "VO2max done. ${completedCount} reps. Fuel!"
             ws.workoutType == WorkoutType.THRESHOLD ->
-                "Threshold done. ${completedCount} sets. Recover well."
+                "Threshold done. Recover well."
             ws.workoutType == WorkoutType.SWEET_SPOT ->
-                "Sweet spot done. Fuel within 20 min."
-            else -> "Session done. Fuel within 20 min."
+                "Sweet spot done. Fuel up!"
+            else -> "Session done. Fuel up!"
         }
 
         return CoachingEvent(
@@ -561,15 +561,15 @@ object WorkoutCoachingRules {
         val recoverySlow = ws.recoveryQualityDeclining
         val message = when {
             recoverySlow && ws.workoutType == WorkoutType.VO2_MAX ->
-                "Last rep. Recovery was slow — start controlled."
+                "Last rep. Recovery slow — start easy."
             recoverySlow ->
-                "Final block. Recovery slower — start steady."
+                "Final block. Start steady."
             ws.workoutType == WorkoutType.VO2_MAX ->
                 "Last rep. Go all in."
             ws.workoutType == WorkoutType.THRESHOLD ->
-                "Final block. Hold threshold to the end."
+                "Final block. Hold it to the end."
             ws.workoutType == WorkoutType.SWEET_SPOT ->
-                "Last block. Finish strong and steady."
+                "Last block. Finish strong."
             else ->
                 "Final block. You've got this."
         }
