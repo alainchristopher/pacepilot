@@ -30,10 +30,16 @@ class PowerAnalyzer {
     // Sustained zone tracking for adaptive coaching
     private val recentZoneBuffer = ArrayDeque<Int>(300) // 5 min of zone samples
 
+    // Ride-level accumulators for true averages
+    private var totalPowerSum = 0L
+    private var totalPowerSamples = 0
+
     fun onPowerSample(watts: Int, ftp: Int) {
         avg5s.add(watts.toDouble())
         avg30s.add(watts.toDouble())
         avg3min.add(watts.toDouble())
+        totalPowerSum += watts
+        totalPowerSamples++
 
         val s30avg = avg30s.average.toInt()
         np30sBuffer.add(s30avg)
@@ -78,6 +84,7 @@ class PowerAnalyzer {
         recentZoneBuffer.clear()
         intervalSamplesTotal = 0; intervalSamplesInRange = 0
         isInEffort = false
+        totalPowerSum = 0L; totalPowerSamples = 0
     }
 
     // ------------------------------------------------------------------
@@ -87,6 +94,9 @@ class PowerAnalyzer {
     val power5sAvg: Int get() = avg5s.average.toInt()
     val power30sAvg: Int get() = avg30s.average.toInt()
     val power3minAvg: Int get() = avg3min.average.toInt()
+
+    /** True ride-level average power (all samples since start) */
+    val rideAvgPower: Int get() = if (totalPowerSamples > 0) (totalPowerSum / totalPowerSamples).toInt() else 0
 
     fun normalizedPower(): Int = ZoneCalculator.normalizedPower(np30sBuffer.takeLast(3600))
 

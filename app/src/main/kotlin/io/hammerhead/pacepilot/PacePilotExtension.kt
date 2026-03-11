@@ -73,6 +73,7 @@ class PacePilotExtension : KarooExtension("pacepilot", "1.0") {
         telemetryAggregator = TelemetryAggregator(
             karooSystem = karooSystem,
             workoutCollector = workoutCollector,
+            workoutTracker = workoutTracker,
             settingsRepo = settingsRepo,
             scope = serviceScope,
         )
@@ -164,15 +165,21 @@ class PacePilotExtension : KarooExtension("pacepilot", "1.0") {
             coachingEngine.start()
         }
 
-        // Zone-time + peak tracking — separate job so it doesn't block the launch above
+        // Zone-time + peak tracking — 1 Hz sampling (not per-emission)
         zoneTrackingJob = serviceScope.launch {
-            telemetryAggregator.rideContext.collect { ctx ->
-                val pz = (ctx.powerZone - 1).coerceIn(0, 6)
-                powerZoneTimeSec[pz]++
-                val hz = (ctx.hrZone - 1).coerceIn(0, 4)
-                if (ctx.hrZone > 0) hrZoneTimeSec[hz]++
+            while (true) {
+                val ctx = telemetryAggregator.rideContext.value
+                if (ctx.powerZone > 0) {
+                    val pz = (ctx.powerZone - 1).coerceIn(0, 6)
+                    powerZoneTimeSec[pz]++
+                }
+                if (ctx.hrZone > 0) {
+                    val hz = (ctx.hrZone - 1).coerceIn(0, 4)
+                    hrZoneTimeSec[hz]++
+                }
                 if (ctx.powerWatts > peakPowerWatts) peakPowerWatts = ctx.powerWatts
                 if (ctx.heartRateBpm > peakHrBpm) peakHrBpm = ctx.heartRateBpm
+                kotlinx.coroutines.delay(1000)
             }
         }
     }

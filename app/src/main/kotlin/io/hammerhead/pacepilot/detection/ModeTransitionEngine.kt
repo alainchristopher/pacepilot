@@ -6,10 +6,10 @@ import io.hammerhead.pacepilot.model.RideContext
 import io.hammerhead.pacepilot.model.RideMode
 import io.hammerhead.pacepilot.model.currentMode
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.distinctUntilChangedBy
-import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.launch
 import timber.log.Timber
 
 /**
@@ -38,13 +38,20 @@ class ModeTransitionEngine(
     private val CLIMB_EXIT_SUSTAINED_SEC = 60     // must be flat for 60s before reverting
     private val Z1_SUSTAINED_FOR_RECOVERY_MIN = 15f
 
+    private var monitorJob: Job? = null
+
     fun start() {
-        rideContext
-            .distinctUntilChangedBy { ctx ->
-                Triple(ctx.currentMode, ctx.workout.isActive, ctx.isOnClimb)
+        monitorJob = scope.launch {
+            while (true) {
+                evaluate(rideContext.value)
+                delay(1000) // 1 Hz evaluation — ensures hysteresis counters track real seconds
             }
-            .onEach { ctx -> evaluate(ctx) }
-            .launchIn(scope)
+        }
+    }
+
+    fun stop() {
+        monitorJob?.cancel()
+        monitorJob = null
     }
 
     private fun evaluate(ctx: RideContext) {

@@ -69,6 +69,8 @@ class ModeDetector(
         minGainM: Float,
         gradThresholdPct: Float,
     ): Boolean {
+        // steepPct = % of route segments above gradThresholdPct gradient
+        // A route is "climb-focused" if total gain is big OR > 30% of it is steep
         return totalGainM >= minGainM || steepPct >= 30f
     }
 }

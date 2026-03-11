@@ -1,5 +1,6 @@
 package io.hammerhead.pacepilot.ai
 
+import io.hammerhead.pacepilot.model.IntervalPhase
 import io.hammerhead.pacepilot.model.RideContext
 import io.hammerhead.pacepilot.model.RideMode
 import io.hammerhead.pacepilot.model.currentMode
@@ -27,6 +28,10 @@ class RideNarrative {
     private val firstHourPower = RollingAverage(3600)
     private var firstHourLocked = false
     private var firstHourAvgPower: Int = 0
+
+    // Interval phase tracking for auto-detection of completed efforts
+    private var lastPhase: IntervalPhase = IntervalPhase.UNKNOWN
+    private var lastStep: Int = -1
 
     // HR drift tracking
     private var hrDriftStartSec: Long = 0L
@@ -90,6 +95,22 @@ class RideNarrative {
         if (baselineEstablished && elapsed > 3600 && !hrDriftWarned && ctx.hrDecouplingPct > 5f) {
             logEvent("HR decoupling ${ctx.hrDecouplingPct.toInt()}% — cardiac drift (fatigue signal)", elapsed)
             hrDriftWarned = true
+        }
+
+        // Auto-detect interval completion (EFFORT → RECOVERY/COOLDOWN transition)
+        if (ctx.workout.isActive) {
+            val currentPhase = ctx.workout.currentPhase
+            val currentStep = ctx.workout.currentStep
+            if (lastPhase == IntervalPhase.EFFORT &&
+                currentPhase != IntervalPhase.EFFORT &&
+                currentStep != lastStep
+            ) {
+                val wasOver = ctx.workout.complianceScore < 0.8f && ctx.power30sAvg > (ctx.workout.targetHigh ?: Int.MAX_VALUE)
+                val wasBelow = ctx.workout.complianceScore < 0.8f && ctx.power30sAvg < (ctx.workout.targetLow ?: 0)
+                onIntervalCompleted(wasOver, wasBelow)
+            }
+            lastPhase = currentPhase
+            lastStep = currentStep
         }
 
         // Fueling ack tracking

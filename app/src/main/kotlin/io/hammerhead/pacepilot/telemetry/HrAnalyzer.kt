@@ -27,10 +27,15 @@ class HrAnalyzer {
     // Zone-time tracking
     private val recentZoneBuffer = ArrayDeque<Int>(120) // 2 min
 
+    // Ride-level accumulators for true averages
+    private var totalHrSum = 0L
+    private var totalHrSamples = 0
+
     fun onHrSample(bpm: Int, powerWatts: Int, rideElapsed: Long, maxHr: Int) {
         avg60s.add(bpm.toDouble())
         avg5min.add(bpm.toDouble())
         rideElapsedSec = rideElapsed
+        if (bpm > 0) { totalHrSum += bpm; totalHrSamples++ }
 
         val zone = ZoneCalculator.hrZone(bpm, maxHr)
         if (recentZoneBuffer.size >= 120) recentZoneBuffer.removeFirst()
@@ -79,7 +84,11 @@ class HrAnalyzer {
         recentZoneBuffer.clear()
         recoveryStartBpm = 0; recoveryElapsedSec = 0; isInRecovery = false
         rideElapsedSec = 0L
+        totalHrSum = 0L; totalHrSamples = 0
     }
+
+    /** True ride-level average HR (all samples since start) */
+    val rideAvgHr: Int get() = if (totalHrSamples > 0) (totalHrSum / totalHrSamples).toInt() else 0
 
     // ------------------------------------------------------------------
     // Outputs

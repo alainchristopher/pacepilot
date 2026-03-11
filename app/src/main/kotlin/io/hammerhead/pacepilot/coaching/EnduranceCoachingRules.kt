@@ -50,7 +50,6 @@ object EnduranceCoachingRules {
     fun fuelTimeBasedReminder(ctx: RideContext): CoachingEvent? {
         if (ctx.rideElapsedSec < 1800) return null // min 30 min before first prompt
 
-        val nowSec = ctx.rideElapsedSec + (System.currentTimeMillis() / 1000 - ctx.rideElapsedSec)
         val sinceLastEat = if (ctx.lastFuelAckEpochSec > 0)
             System.currentTimeMillis() / 1000 - ctx.lastFuelAckEpochSec else ctx.rideElapsedSec
         val minInterval = if (ctx.rideElapsedSec > 7200) 1800L else 2700L
@@ -122,8 +121,8 @@ object EnduranceCoachingRules {
      * Fires when ride is in the final hour and rider is drifting up.
      */
     fun protectLastHour(ctx: RideContext): CoachingEvent? {
-        // Only relevant on rides > 2.5 hours (at min 1.5h mark)
-        if (ctx.rideElapsedSec < 5400) return null // less than 1.5h in
+        if (ctx.rideElapsedSec < 5400) return null
+        if (ctx.ftp <= 0) return null
 
         val z3Lower = ZoneCalculator.powerZoneLowerWatts(3, ctx.ftp)
         if (ctx.power30sAvg < z3Lower) return null // already in Z2, fine
@@ -146,7 +145,8 @@ object EnduranceCoachingRules {
      * Sparse — fires once early in the ride to confirm good execution.
      */
     fun pacingConsistent(ctx: RideContext): CoachingEvent? {
-        if (ctx.rideElapsedSec < 1200 || ctx.rideElapsedSec > 2400) return null // 20-40 min in only
+        if (ctx.rideElapsedSec < 1200 || ctx.rideElapsedSec > 2400) return null
+        if (ctx.ftp <= 0) return null
 
         val z2Lower = ZoneCalculator.powerZoneLowerWatts(2, ctx.ftp)
         val z2Upper = ZoneCalculator.powerZoneUpperWatts(2, ctx.ftp)

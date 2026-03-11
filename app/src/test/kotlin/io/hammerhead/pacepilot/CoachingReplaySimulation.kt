@@ -417,6 +417,102 @@ class CoachingReplaySimulation {
         runSimulation("Base Builder HR — 10min warmup / 40min active (148-166bpm) / 10min cooldown", frames)
     }
 
+    // ─── Scenario 7: THRESHOLD — rider starts too hard, policy enforces strict ceiling ──
+
+    @Test
+    fun `threshold workout - rider overcooks early and fades late`() {
+        // 2×20 min threshold. Target: 240-260W (96-104% FTP).
+        // Rider goes 275W in interval 1, then drops to 230W in interval 2.
+        val sim = RideSimulator.workout(ftp = ftp, maxHr = maxHr)
+            .warmupInterval(durationSec = 600)
+            .effortInterval(targetLow = 240, targetHigh = 260, durationSec = 1200) {
+                copy(
+                    powerWatts = 275, power30sAvg = 273, power3minAvg = 270,
+                    heartRateBpm = 165, cadenceRpm = 82, powerZone = 4,
+                    workout = workout.copy(workoutType = WorkoutType.THRESHOLD),
+                )
+            }
+            .recoveryInterval(durationSec = 300) {
+                copy(
+                    powerWatts = 115, power30sAvg = 118, heartRateBpm = 142, cadenceRpm = 80,
+                    workout = workout.copy(workoutType = WorkoutType.THRESHOLD),
+                )
+            }
+            .effortInterval(targetLow = 240, targetHigh = 260, durationSec = 1200) {
+                copy(
+                    powerWatts = 228, power30sAvg = 226, power3minAvg = 230,
+                    heartRateBpm = 168, cadenceRpm = 79, powerZone = 4,
+                    workout = workout.copy(
+                        workoutType = WorkoutType.THRESHOLD,
+                        powerFadingTrend = true,
+                        effortAvgPowers = listOf(272, 226),
+                    ),
+                )
+            }
+            .cooldownInterval(durationSec = 300)
+
+        runSimulation("THRESHOLD Workout — 2×20 min, overcooks early then fades", sim.build())
+    }
+
+    // ─── Scenario 8: SWEET_SPOT — steady discipline, positive feedback ────
+
+    @Test
+    fun `sweet spot workout - dialed in but one drift`() {
+        // 3×12 min @ 88-93% FTP = 220-232W. Rider stays in range mostly.
+        val sim = RideSimulator.workout(ftp = ftp, maxHr = maxHr)
+            .warmupInterval(durationSec = 600)
+            .effortInterval(targetLow = 220, targetHigh = 232, durationSec = 720) {
+                copy(
+                    powerWatts = 226, power30sAvg = 225, power3minAvg = 224,
+                    heartRateBpm = 155, cadenceRpm = 83, powerZone = 3,
+                    workout = workout.copy(workoutType = WorkoutType.SWEET_SPOT),
+                )
+            }
+            .recoveryInterval(durationSec = 300) {
+                copy(powerWatts = 110, power30sAvg = 112, heartRateBpm = 140, cadenceRpm = 78,
+                    workout = workout.copy(workoutType = WorkoutType.SWEET_SPOT))
+            }
+            .effortInterval(targetLow = 220, targetHigh = 232, durationSec = 720) {
+                copy(
+                    powerWatts = 238, power30sAvg = 236, power3minAvg = 235, // drifted up!
+                    heartRateBpm = 162, cadenceRpm = 84, powerZone = 3,
+                    workout = workout.copy(workoutType = WorkoutType.SWEET_SPOT),
+                )
+            }
+            .recoveryInterval(durationSec = 300) {
+                copy(powerWatts = 108, power30sAvg = 110, heartRateBpm = 138, cadenceRpm = 77,
+                    workout = workout.copy(workoutType = WorkoutType.SWEET_SPOT))
+            }
+            .effortInterval(targetLow = 220, targetHigh = 232, durationSec = 720) {
+                copy(
+                    powerWatts = 224, power30sAvg = 223, power3minAvg = 222,
+                    heartRateBpm = 158, cadenceRpm = 82, powerZone = 3,
+                    workout = workout.copy(workoutType = WorkoutType.SWEET_SPOT),
+                )
+            }
+            .cooldownInterval(durationSec = 300)
+
+        runSimulation("SWEET_SPOT Workout — 3×12 min, one drift above ceiling", sim.build())
+    }
+
+    // ─── Scenario 9: RECOVERY_RIDE structured — strict Z1 enforcement ─────
+
+    @Test
+    fun `recovery ride structured workout - very strict ceiling enforcement`() {
+        // Z1 ceiling = 135W (54% FTP). Rider keeps drifting above.
+        val sim = RideSimulator.workout(ftp = ftp, maxHr = maxHr)
+            .effortInterval(targetLow = 50, targetHigh = 135, durationSec = 2400) {
+                copy(
+                    powerWatts = 142, power30sAvg = 140, power3minAvg = 138,
+                    heartRateBpm = 118, cadenceRpm = 82, powerZone = 1,
+                    workout = workout.copy(workoutType = WorkoutType.RECOVERY_RIDE),
+                )
+            }
+            .cooldownInterval(durationSec = 300)
+
+        runSimulation("RECOVERY_RIDE Structured — Z1 ceiling enforcement", sim.build())
+    }
+
     private fun baseHrWorkoutFrame(
         sec: Int, hr: Int, power: Int,
         targetLow: Int, targetHigh: Int,

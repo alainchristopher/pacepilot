@@ -1,9 +1,11 @@
 package io.hammerhead.pacepilot.ai
 
+import io.hammerhead.pacepilot.coaching.WorkoutTypePolicy
 import io.hammerhead.pacepilot.history.RideHistory
 import io.hammerhead.pacepilot.model.CoachingEvent
 import io.hammerhead.pacepilot.model.RideContext
 import io.hammerhead.pacepilot.model.TargetType
+import io.hammerhead.pacepilot.model.WorkoutType
 import io.hammerhead.pacepilot.model.currentMode
 import io.hammerhead.pacepilot.model.isHrBasedWorkout
 
@@ -126,6 +128,7 @@ OUTPUT RULES — NON-NEGOTIABLE:
         }
 
         if (ctx.cadenceRpm > 0) appendLine("Cadence: ${ctx.cadenceRpm} rpm")
+        if (ctx.speedKmh > 0f) appendLine("Speed: ${"%.1f".format(ctx.speedKmh)} km/h · Distance: ${"%.1f".format(ctx.distanceKm)} km")
         if (ctx.elevationGradePct != 0f) {
             val terrain = when {
                 ctx.elevationGradePct > 6f -> "steep climb"
@@ -145,6 +148,16 @@ OUTPUT RULES — NON-NEGOTIABLE:
             appendLine()
             appendLine("## Interval")
             val targetUnit = if (ws.targetType == TargetType.HEART_RATE) "bpm" else "W"
+
+            // Workout type + coaching emphasis
+            if (ws.workoutType != WorkoutType.UNKNOWN) {
+                val typeLabel = ws.workoutType.name.replace('_', ' ').lowercase()
+                    .replaceFirstChar { it.uppercase() }
+                val policy = WorkoutTypePolicy.forType(ws.workoutType)
+                appendLine("Workout type: $typeLabel")
+                appendLine("Coaching emphasis: ${policy.aiEmphasis}")
+            }
+
             appendLine("${ws.currentPhase.name.lowercase()} · step ${ws.currentStep + 1}/${ws.totalSteps} · ${ws.intervalElapsedSec}s elapsed / ${ws.intervalRemainingSec}s left")
             if (ws.targetLow != null || ws.targetHigh != null) {
                 val currentMetric = if (ws.targetType == TargetType.HEART_RATE) ctx.heartRateBpm else ctx.power30sAvg

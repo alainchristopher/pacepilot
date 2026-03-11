@@ -11,6 +11,7 @@ import io.hammerhead.pacepilot.model.IntervalPhase
 import io.hammerhead.pacepilot.model.RideContext
 import io.hammerhead.pacepilot.util.ZoneCalculator
 import io.hammerhead.pacepilot.settings.SettingsRepository
+import io.hammerhead.pacepilot.workout.WorkoutTracker
 import io.hammerhead.pacepilot.util.consumerFlow
 import io.hammerhead.pacepilot.util.streamDataFlow
 import kotlinx.coroutines.CoroutineScope
@@ -30,6 +31,7 @@ import timber.log.Timber
 class TelemetryAggregator(
     private val karooSystem: KarooSystemService,
     private val workoutCollector: WorkoutStreamCollector,
+    private val workoutTracker: WorkoutTracker,
     private val settingsRepo: SettingsRepository,
     private val scope: CoroutineScope,
 ) {
@@ -284,8 +286,11 @@ class TelemetryAggregator(
     }
 
     private suspend fun collectWorkoutState() {
-        workoutCollector.state.collect { ws ->
+        workoutCollector.state.collect { rawWs ->
             val ctx = _context.value
+            // Enrich WorkoutState with sticky type classification (WorkoutTracker is stateful)
+            val ws = workoutTracker.update(rawWs, ctx.ftp)
+
             // Notify analyzers of interval phase transitions
             val prevPhase = ctx.workout.currentPhase
             if (ws.currentPhase != prevPhase) {
