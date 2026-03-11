@@ -239,18 +239,19 @@ class PacePilotExtension : KarooExtension("pacepilot", "1.0") {
 
     private fun dispatchModeNotification(mode: RideMode) {
         val message = when (mode) {
-            RideMode.WORKOUT -> "Workout detected. Coaching active."
-            RideMode.CLIMB_FOCUSED -> "Climb route detected. Climb coaching active."
-            RideMode.ENDURANCE -> "Endurance coaching active."
-            RideMode.ADAPTIVE -> "Observing ride. Coaching starts in 10 min."
-            RideMode.RECOVERY -> "Recovery mode. Strict Z1 coaching active."
+            RideMode.WORKOUT -> "Workout mode. Coaching active."
+            RideMode.CLIMB_FOCUSED -> "Climb mode. Coaching active."
+            RideMode.ENDURANCE -> "Endurance mode. Coaching active."
+            RideMode.ADAPTIVE -> "Observing. Coaching starts in 10 min."
+            RideMode.RECOVERY -> "Recovery mode. Keep it Z1."
         }
+        val detail = if (message.length > 40) message.take(37) + "…" else message
         karooSystem.dispatch(
             InRideAlert(
                 id = "pp_mode_${mode.name.lowercase()}",
                 icon = R.drawable.ic_pacepilot,
                 title = "PacePilot",
-                detail = message,
+                detail = detail,
                 autoDismissMs = 8_000,
                 backgroundColor = R.color.alert_bg_coaching,
                 textColor = R.color.alert_text_coaching,

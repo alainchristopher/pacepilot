@@ -64,6 +64,13 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // Called when activity is already running (singleTop) and a new deep link arrives
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleDeepLink()
+    }
+
     private fun handleDeepLink() {
         val uri = intent?.data ?: return
         if (uri.scheme != "pacepilot" || uri.host != "config") return

@@ -33,9 +33,9 @@ object ClimbCoachingRules {
         if (distToTop < 800) return null // not at start anymore
 
         val multiClimbMsg = if (ctx.totalClimbsOnRoute > 1) {
-            "Climb ${ctx.climbNumber} of ${ctx.totalClimbsOnRoute}. Settle in — don't overcook."
+            "Climb ${ctx.climbNumber}/${ctx.totalClimbsOnRoute}. Settle in."
         } else {
-            "Climb ahead. Settle in, don't overcook the start."
+            "Climb ahead. Settle in, don't blow up."
         }
 
         return CoachingEvent(
@@ -139,7 +139,7 @@ object ClimbCoachingRules {
 
         return CoachingEvent(
             ruleId = RuleId.MULTI_CLIMB_FATIGUE,
-            message = "Climb ${ctx.climbNumber} of ${ctx.totalClimbsOnRoute}. HR baseline rising — pace conservatively.",
+            message = "Climb ${ctx.climbNumber}/${ctx.totalClimbsOnRoute}. HR rising. Pace it.",
             priority = CoachingPriority.HIGH,
             alertStyle = AlertStyle.WARNING,
             suppressIfFiredInLastSec = 600,

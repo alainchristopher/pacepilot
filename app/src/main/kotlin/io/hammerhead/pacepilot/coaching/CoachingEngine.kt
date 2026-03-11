@@ -193,14 +193,16 @@ class CoachingEngine(
         }
 
     private fun dispatch(event: CoachingEvent, message: String) {
-        Timber.i("CoachingEngine: rule=${event.ruleId} priority=${event.priority} → \"$message\"")
+        // Karoo's InRideAlert detail field wraps/truncates beyond ~40 chars
+        val detail = if (message.length > 40) message.take(37) + "…" else message
+        Timber.i("CoachingEngine: rule=${event.ruleId} priority=${event.priority} → \"$detail\"")
         val (bgColor, textColor, title) = alertAppearance(event.alertStyle)
         karooSystem.dispatch(
             InRideAlert(
                 id = "pp_${event.ruleId}",
                 icon = R.drawable.ic_pacepilot,
                 title = title,
-                detail = message,
+                detail = detail,
                 autoDismissMs = autoDismissMs(event.priority),
                 backgroundColor = bgColor,
                 textColor = textColor,
