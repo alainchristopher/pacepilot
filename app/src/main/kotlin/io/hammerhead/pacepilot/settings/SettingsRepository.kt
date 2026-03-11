@@ -20,6 +20,7 @@ class SettingsRepository(context: Context) {
 
     fun save(settings: UserSettings) {
         prefs.edit()
+            .putBoolean(KEY_APP_ENABLED, settings.appEnabled)
             .putInt(KEY_FTP, settings.ftpOverride)
             .putInt(KEY_MAX_HR, settings.maxHrOverride)
             .putBoolean(KEY_ALERTS_ENABLED, settings.alertsEnabled)
@@ -32,6 +33,7 @@ class SettingsRepository(context: Context) {
             .putInt(KEY_MIN_CADENCE, settings.minEffortCadenceRpm)
             .putString(KEY_LLM_PROVIDER, settings.llmProvider.name)
             .putString(KEY_GEMINI_KEY, settings.geminiApiKey)
+            .putString(KEY_MERCURY_KEY, settings.mercuryApiKey)
             .putInt(KEY_CARB_TARGET_GPH, settings.carbTargetGramsPerHour)
             .putInt(KEY_CARBS_PER_SERVING, settings.carbsPerFuelServing)
             .putInt(KEY_DRINK_INTERVAL_MIN, settings.drinkReminderMinutes)
@@ -40,6 +42,7 @@ class SettingsRepository(context: Context) {
     }
 
     private fun load(): UserSettings = UserSettings(
+        appEnabled = prefs.getBoolean(KEY_APP_ENABLED, true),
         ftpOverride = prefs.getInt(KEY_FTP, 0),
         maxHrOverride = prefs.getInt(KEY_MAX_HR, 0),
         alertsEnabled = prefs.getBoolean(KEY_ALERTS_ENABLED, true),
@@ -56,6 +59,7 @@ class SettingsRepository(context: Context) {
             runCatching { LlmProvider.valueOf(it) }.getOrNull()
         } ?: LlmProvider.DISABLED,
         geminiApiKey = prefs.getString(KEY_GEMINI_KEY, "") ?: "",
+        mercuryApiKey = prefs.getString(KEY_MERCURY_KEY, "") ?: "",
         carbTargetGramsPerHour = prefs.getInt(KEY_CARB_TARGET_GPH, 60),
         carbsPerFuelServing = prefs.getInt(KEY_CARBS_PER_SERVING, 25),
         drinkReminderMinutes = prefs.getInt(KEY_DRINK_INTERVAL_MIN, 20),
@@ -63,6 +67,7 @@ class SettingsRepository(context: Context) {
 
     companion object {
         private const val PREFS_NAME = "pacepilot_settings"
+        private const val KEY_APP_ENABLED = "app_enabled"
         private const val KEY_FTP = "ftp_override"
         private const val KEY_MAX_HR = "max_hr_override"
         private const val KEY_ALERTS_ENABLED = "alerts_enabled"
@@ -75,6 +80,7 @@ class SettingsRepository(context: Context) {
         private const val KEY_MIN_CADENCE = "min_cadence"
         private const val KEY_LLM_PROVIDER = "llm_provider"
         private const val KEY_GEMINI_KEY = "gemini_api_key"
+        private const val KEY_MERCURY_KEY = "mercury_api_key"
         private const val KEY_CARB_TARGET_GPH = "carb_target_gph"
         private const val KEY_CARBS_PER_SERVING = "carbs_per_serving"
         private const val KEY_DRINK_INTERVAL_MIN = "drink_interval_min"

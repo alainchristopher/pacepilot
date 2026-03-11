@@ -138,6 +138,10 @@ class PacePilotExtension : KarooExtension("pacepilot", "1.0") {
 
     private fun startRide() {
         if (isRideActive) return
+        if (!settingsRepo.current.appEnabled) {
+            Timber.i("PacePilot: app disabled — skipping ride start")
+            return
+        }
         isRideActive = true
         Timber.i("PacePilot: ride started")
 

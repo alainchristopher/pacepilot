@@ -3,9 +3,11 @@ package io.hammerhead.pacepilot.coaching
 import io.hammerhead.karooext.KarooSystemService
 import io.hammerhead.karooext.models.InRideAlert
 import io.hammerhead.pacepilot.R
+import io.hammerhead.pacepilot.ai.AiCoachingClient
 import io.hammerhead.pacepilot.ai.CoachingContextBuilder
 import io.hammerhead.pacepilot.ai.GeminiClient
 import io.hammerhead.pacepilot.ai.LlmProvider
+import io.hammerhead.pacepilot.ai.MercuryClient
 import io.hammerhead.pacepilot.ai.RideNarrative
 import io.hammerhead.pacepilot.history.RideHistory
 import io.hammerhead.pacepilot.model.AlertStyle
@@ -53,9 +55,8 @@ class CoachingEngine(
     private var narrativeJob: Job? = null
     private var cooldown: CooldownManager? = null
 
-    // AI layer
-    private var geminiClient: GeminiClient? = null
-    private var geminiCacheName: String? = null
+    // AI layer — polymorphic; null means rules-only mode
+    private var aiClient: AiCoachingClient? = null
     val narrative = RideNarrative()
 
     companion object {
@@ -68,14 +69,17 @@ class CoachingEngine(
         narrative.reset()
 
         val settings = settingsRepo.current
-        if (settings.llmProvider == LlmProvider.GEMINI && settings.geminiApiKey.isNotBlank()) {
-            geminiClient = GeminiClient(settings.geminiApiKey)
-            // Create cache async — coaching starts immediately with static fallback
-            // until the cache is ready (usually <1s)
+        aiClient = when (settings.llmProvider) {
+            LlmProvider.GEMINI -> if (settings.geminiApiKey.isNotBlank()) GeminiClient(settings.geminiApiKey) else null
+            LlmProvider.MERCURY -> if (settings.mercuryApiKey.isNotBlank()) MercuryClient(settings.mercuryApiKey) else null
+            LlmProvider.DISABLED -> null
+        }
+        aiClient?.let { client ->
+            // Init async — coaching starts immediately with static fallback until ready
             scope.launch {
                 val stableContext = CoachingContextBuilder.buildStableContext(historyProvider())
-                geminiCacheName = geminiClient?.createCache(stableContext)
-                Timber.i("CoachingEngine: Gemini cache=${geminiCacheName ?: "none (will use uncached)"}")
+                client.initRide(CoachingContextBuilder.SYSTEM_PROMPT, stableContext)
+                Timber.i("CoachingEngine: AI provider ${settings.llmProvider} ready")
             }
         }
 
@@ -101,14 +105,11 @@ class CoachingEngine(
         narrativeJob?.cancel(); narrativeJob = null
         cooldown?.reset()
 
-        // Clean up Gemini cache
-        val cacheName = geminiCacheName
-        val client = geminiClient
-        if (cacheName != null && client != null) {
-            scope.launch { client.deleteCache(cacheName) }
+        val client = aiClient
+        aiClient = null
+        if (client != null) {
+            scope.launch { client.endRide() }
         }
-        geminiCacheName = null
-        geminiClient = null
         narrative.reset()
 
         Timber.i("CoachingEngine: stopped")
@@ -116,18 +117,26 @@ class CoachingEngine(
 
     fun onSettingsChanged() {
         val settings = settingsRepo.current
-        // Rebuild client if key changed
-        if (settings.llmProvider == LlmProvider.GEMINI && settings.geminiApiKey.isNotBlank()) {
-            if (geminiClient == null) {
-                geminiClient = GeminiClient(settings.geminiApiKey)
-                scope.launch {
-                    val stableContext = CoachingContextBuilder.buildStableContext(historyProvider())
-                    geminiCacheName = geminiClient?.createCache(stableContext)
-                }
+        val needsClient = when (settings.llmProvider) {
+            LlmProvider.GEMINI -> settings.geminiApiKey.isNotBlank()
+            LlmProvider.MERCURY -> settings.mercuryApiKey.isNotBlank()
+            LlmProvider.DISABLED -> false
+        }
+        if (needsClient && aiClient == null) {
+            val newClient: AiCoachingClient = when (settings.llmProvider) {
+                LlmProvider.GEMINI -> GeminiClient(settings.geminiApiKey)
+                LlmProvider.MERCURY -> MercuryClient(settings.mercuryApiKey)
+                LlmProvider.DISABLED -> return
             }
-        } else {
-            geminiClient = null
-            geminiCacheName = null
+            aiClient = newClient
+            scope.launch {
+                val stableContext = CoachingContextBuilder.buildStableContext(historyProvider())
+                newClient.initRide(CoachingContextBuilder.SYSTEM_PROMPT, stableContext)
+            }
+        } else if (!needsClient) {
+            val old = aiClient
+            aiClient = null
+            if (old != null) scope.launch { old.endRide() }
         }
     }
 
@@ -155,21 +164,15 @@ class CoachingEngine(
 
         cd.recordFired(toFire.ruleId, toFire.priority)
 
-        val client = geminiClient
+        val client = aiClient
         if (client != null) {
             // Show static message immediately — rider gets feedback in <1ms
             dispatch(toFire, toFire.message)
 
-            // Upgrade async — if Gemini responds before the alert auto-dismisses,
-            // rider sees the smarter message
+            // Upgrade async — when AI responds before auto-dismiss, rider sees smarter message
             scope.launch {
                 val livePrompt = CoachingContextBuilder.buildLivePrompt(toFire, ctx, narrative)
-                val aiMessage = client.generateWithCache(
-                    systemPrompt = CoachingContextBuilder.SYSTEM_PROMPT,
-                    cacheName = geminiCacheName,
-                    livePrompt = livePrompt,
-                    fallback = toFire.message,
-                )
+                val aiMessage = client.generate(livePrompt, toFire.message)
                 if (aiMessage != toFire.message) {
                     Timber.d("CoachingEngine: AI upgraded \"${toFire.message}\" → \"$aiMessage\"")
                     dispatch(toFire, aiMessage)

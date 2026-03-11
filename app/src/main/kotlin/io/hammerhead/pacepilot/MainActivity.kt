@@ -16,6 +16,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -28,7 +29,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.hammerhead.pacepilot.ai.LlmProvider
-import io.hammerhead.pacepilot.ai.LlmProvider.GEMINI
 import io.hammerhead.pacepilot.model.RideMode
 import io.hammerhead.pacepilot.settings.SettingsRepository
 import io.hammerhead.pacepilot.settings.UserSettings
@@ -67,17 +67,30 @@ class MainActivity : ComponentActivity() {
     private fun handleDeepLink() {
         val uri = intent?.data ?: return
         if (uri.scheme != "pacepilot" || uri.host != "config") return
-        val apiKey = uri.getQueryParameter("gemini_key")
-        if (!apiKey.isNullOrBlank()) {
-            val current = settingsRepo.current
-            settingsRepo.save(
-                current.copy(
-                    geminiApiKey = apiKey,
-                    llmProvider = LlmProvider.GEMINI,
-                )
-            )
+
+        val geminiKey = uri.getQueryParameter("gemini_key")
+        val mercuryKey = uri.getQueryParameter("mercury_key")
+        val providerParam = uri.getQueryParameter("provider")
+
+        val current = settingsRepo.current
+        var updated = current
+
+        if (!geminiKey.isNullOrBlank()) {
+            updated = updated.copy(geminiApiKey = geminiKey)
+            if (providerParam == "gemini" || providerParam == null) {
+                updated = updated.copy(llmProvider = LlmProvider.GEMINI)
+            }
             Toast.makeText(this, "Gemini API key saved!", Toast.LENGTH_SHORT).show()
         }
+        if (!mercuryKey.isNullOrBlank()) {
+            updated = updated.copy(mercuryApiKey = mercuryKey)
+            if (providerParam == "mercury") {
+                updated = updated.copy(llmProvider = LlmProvider.MERCURY)
+            }
+            Toast.makeText(this, "Mercury-2 API key saved!", Toast.LENGTH_SHORT).show()
+        }
+
+        if (updated != current) settingsRepo.save(updated)
     }
 }
 
@@ -114,8 +127,56 @@ fun PacePilotSettingsScreen(
             )
         }
 
+        // --- Master App Toggle ---
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(CardShape)
+                .border(
+                    width = 1.dp,
+                    color = if (settings.appEnabled) Primary.copy(alpha = 0.4f) else CardBorder,
+                    shape = CardShape,
+                )
+                .background(if (settings.appEnabled) PrimaryMuted else CardBg)
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column {
+                    Text(
+                        "PacePilot Active",
+                        color = if (settings.appEnabled) Primary else TextSecondary,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        if (settings.appEnabled) "Coaching enabled on next ride" else "Extension dormant — no coaching",
+                        color = TextTertiary,
+                        fontSize = 11.sp,
+                    )
+                }
+                Switch(
+                    checked = settings.appEnabled,
+                    onCheckedChange = { settings = settings.copy(appEnabled = it) },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Primary,
+                        checkedTrackColor = PrimaryMuted,
+                        uncheckedThumbColor = TextTertiary,
+                        uncheckedTrackColor = FieldBorder,
+                        uncheckedBorderColor = Color.Transparent,
+                    ),
+                )
+            }
+        }
+
+        // All settings below are visually dimmed when app is disabled
+        val sectionAlpha = if (settings.appEnabled) 1f else 0.4f
+
         // --- Zones Card ---
-        SettingsCard(title = "POWER & HR") {
+        SettingsCard(title = "POWER & HR", alpha = sectionAlpha) {
             InputField(
                 label = "FTP (watts)",
                 value = if (settings.ftpOverride > 0) settings.ftpOverride.toString() else "",
@@ -134,7 +195,7 @@ fun PacePilotSettingsScreen(
         }
 
         // --- Alerts Card ---
-        SettingsCard(title = "COACHING ALERTS") {
+        SettingsCard(title = "COACHING ALERTS", alpha = sectionAlpha) {
             ToggleRow("Enable coaching alerts", settings.alertsEnabled) {
                 settings = settings.copy(alertsEnabled = it)
             }
@@ -169,37 +230,65 @@ fun PacePilotSettingsScreen(
         }
 
         // --- AI Card ---
-        SettingsCard(title = "AI COACHING") {
-            ToggleRow(
-                label = "Gemini 2.0 Flash",
-                checked = settings.llmProvider == GEMINI,
-            ) {
-                settings = settings.copy(llmProvider = if (it) GEMINI else LlmProvider.DISABLED)
-            }
+        SettingsCard(title = "AI COACHING", alpha = sectionAlpha) {
+            Text("Provider", color = TextSecondary, fontSize = 12.sp)
+            Spacer(modifier = Modifier.height(8.dp))
+            ProviderChips(
+                selected = settings.llmProvider,
+                enabled = settings.appEnabled,
+                onSelect = { settings = settings.copy(llmProvider = it) },
+            )
 
-            if (settings.llmProvider == GEMINI) {
-                Spacer(modifier = Modifier.height(10.dp))
-                ApiKeyField(
-                    value = settings.geminiApiKey,
-                    onChange = { settings = settings.copy(geminiApiKey = it) },
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    "Free key at aistudio.google.com",
-                    color = TextTertiary,
-                    fontSize = 11.sp,
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                InfoBanner(
-                    text = "Personalised cues from live data + 30-ride history. Falls back to rule-based if offline.",
-                    color = Success,
-                    bgColor = SuccessMuted,
-                )
+            when (settings.llmProvider) {
+                LlmProvider.GEMINI -> {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    ApiKeyField(
+                        label = "Gemini API Key",
+                        placeholder = "AIza...",
+                        value = settings.geminiApiKey,
+                        enabled = settings.appEnabled,
+                        onChange = { settings = settings.copy(geminiApiKey = it) },
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text("Free at aistudio.google.com", color = TextTertiary, fontSize = 11.sp)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    InfoBanner(
+                        text = "Personalised cues from live data + 30-ride history. Falls back to rule-based if offline.",
+                        color = Success,
+                        bgColor = SuccessMuted,
+                    )
+                }
+                LlmProvider.MERCURY -> {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    ApiKeyField(
+                        label = "Mercury-2 API Key",
+                        placeholder = "incep_...",
+                        value = settings.mercuryApiKey,
+                        enabled = settings.appEnabled,
+                        onChange = { settings = settings.copy(mercuryApiKey = it) },
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text("10M free tokens at platform.inceptionlabs.ai", color = TextTertiary, fontSize = 11.sp)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    InfoBanner(
+                        text = "Experimental — 1,000+ tokens/sec diffusion model. Sub-200ms responses. Sends full context per call (no server cache).",
+                        color = Primary,
+                        bgColor = PrimaryMuted,
+                    )
+                }
+                LlmProvider.DISABLED -> {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    InfoBanner(
+                        text = "Rules-only mode. Zero-latency coaching without internet. All alerts are deterministic.",
+                        color = TextSecondary,
+                        bgColor = FieldBorder.copy(alpha = 0.3f),
+                    )
+                }
             }
         }
 
         // --- Mode Card ---
-        SettingsCard(title = "RIDE MODE") {
+        SettingsCard(title = "RIDE MODE", alpha = sectionAlpha) {
             Text(
                 "Detection mode",
                 color = TextPrimary,
@@ -249,11 +338,13 @@ fun PacePilotSettingsScreen(
 @Composable
 private fun SettingsCard(
     title: String,
+    alpha: Float = 1f,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .alpha(alpha)
             .clip(CardShape)
             .border(1.dp, CardBorder, CardShape)
             .background(CardBg)
@@ -329,24 +420,28 @@ private fun InputField(
 
 @Composable
 private fun ApiKeyField(
+    label: String = "API Key",
+    placeholder: String = "key...",
     value: String,
+    enabled: Boolean = true,
     onChange: (String) -> Unit,
 ) {
     var visible by remember { mutableStateOf(false) }
     Column {
-        Text("API Key", color = TextSecondary, fontSize = 12.sp)
+        Text(label, color = TextSecondary, fontSize = 12.sp)
         Spacer(modifier = Modifier.height(4.dp))
         OutlinedTextField(
             value = value,
             onValueChange = onChange,
-            placeholder = { Text("AIza...", color = TextTertiary, fontSize = 13.sp) },
+            enabled = enabled,
+            placeholder = { Text(placeholder, color = TextTertiary, fontSize = 13.sp) },
             singleLine = true,
             visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
             trailingIcon = {
-                TextButton(onClick = { visible = !visible }) {
+                TextButton(onClick = { visible = !visible }, enabled = enabled) {
                     Text(
                         if (visible) "HIDE" else "SHOW",
-                        color = TextSecondary,
+                        color = if (enabled) TextSecondary else TextTertiary,
                         fontSize = 10.sp,
                         letterSpacing = 0.5.sp,
                     )
@@ -355,13 +450,64 @@ private fun ApiKeyField(
             colors = OutlinedTextFieldDefaults.colors(
                 focusedTextColor = TextPrimary,
                 unfocusedTextColor = TextPrimary,
+                disabledTextColor = TextTertiary,
                 cursorColor = Primary,
                 focusedBorderColor = FieldBorderFocused,
                 unfocusedBorderColor = FieldBorder,
+                disabledBorderColor = FieldBorder,
             ),
             shape = RoundedCornerShape(8.dp),
             modifier = Modifier.fillMaxWidth(),
         )
+    }
+}
+
+@Composable
+private fun ProviderChips(
+    selected: LlmProvider,
+    enabled: Boolean = true,
+    onSelect: (LlmProvider) -> Unit,
+) {
+    val providers = LlmProvider.values()
+
+    @Composable
+    fun RowScope.Chip(provider: LlmProvider) {
+        val isSelected = selected == provider
+        val bg = if (isSelected) PrimaryMuted else Color.Transparent
+        val border = if (isSelected) Primary else FieldBorder
+        val textColor = when {
+            !enabled -> TextTertiary
+            isSelected -> Primary
+            else -> TextSecondary
+        }
+
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .clip(RoundedCornerShape(6.dp))
+                .border(1.dp, border, RoundedCornerShape(6.dp))
+                .background(bg)
+                .clickable(enabled = enabled) { onSelect(provider) }
+                .padding(vertical = 8.dp, horizontal = 4.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = when (provider) {
+                    LlmProvider.GEMINI -> "Gemini"
+                    LlmProvider.MERCURY -> "Mercury"
+                    LlmProvider.DISABLED -> "Off"
+                },
+                color = textColor,
+                fontSize = 11.sp,
+                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                maxLines = 1,
+                textAlign = TextAlign.Center,
+            )
+        }
+    }
+
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+        providers.forEach { Chip(it) }
     }
 }
 

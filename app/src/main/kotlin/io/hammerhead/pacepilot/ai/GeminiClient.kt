@@ -19,16 +19,14 @@ import java.util.concurrent.TimeUnit
 /**
  * Gemini 2.0 Flash client with context caching support.
  *
- * Usage per ride:
- *   1. Call [createCache] once with the stable parts (system prompt + history).
- *      Store the returned cache name.
- *   2. For each coaching event, call [generateWithCache] passing the cache name
- *      and the live per-event prompt.
- *   3. On ride end, call [deleteCache] to clean up.
+ * Implements [AiCoachingClient]:
+ *   - [initRide] creates a server-side context cache from stable content.
+ *   - [generate] sends only the per-event live prompt (cached calls are cheap).
+ *   - [endRide] deletes the cache.
  *
  * If caching fails (first ride, network issue), falls back to uncached calls.
  */
-class GeminiClient(private val apiKey: String) {
+class GeminiClient(private val apiKey: String) : AiCoachingClient {
 
     companion object {
         private const val BASE = "https://generativelanguage.googleapis.com/v1beta"
@@ -49,6 +47,30 @@ class GeminiClient(private val apiKey: String) {
         .build()
 
     private val json = Json { ignoreUnknownKeys = true }
+
+    // AiCoachingClient state
+    private var storedSystemPrompt: String = ""
+    private var cacheName: String? = null
+
+    // ----------------------------------------------------------------
+    // AiCoachingClient implementation
+    // ----------------------------------------------------------------
+
+    override suspend fun initRide(systemPrompt: String, stableContext: String) {
+        storedSystemPrompt = systemPrompt
+        cacheName = createCache(stableContext)
+        Timber.i("GeminiClient: initRide cache=${cacheName ?: "none (uncached fallback)"}")
+    }
+
+    override suspend fun generate(livePrompt: String, fallback: String): String =
+        generateWithCache(storedSystemPrompt, cacheName, livePrompt, fallback)
+
+    override suspend fun endRide() {
+        val name = cacheName ?: return
+        deleteCache(name)
+        cacheName = null
+        storedSystemPrompt = ""
+    }
 
     // ----------------------------------------------------------------
     // Context caching (stable per-ride content)

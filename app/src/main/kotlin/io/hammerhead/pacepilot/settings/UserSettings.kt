@@ -4,6 +4,9 @@ import io.hammerhead.pacepilot.ai.LlmProvider
 import io.hammerhead.pacepilot.model.RideMode
 
 data class UserSettings(
+    /** Master on/off. When false the extension is fully dormant during rides. */
+    val appEnabled: Boolean = true,
+
     /** Override FTP from Karoo profile (0 = use Karoo) */
     val ftpOverride: Int = 0,
     /** Override max HR from Karoo profile (0 = use Karoo) */
@@ -50,4 +53,6 @@ data class UserSettings(
     val llmProvider: LlmProvider = LlmProvider.DISABLED,
     /** Gemini API key — get free at aistudio.google.com */
     val geminiApiKey: String = "",
+    /** Mercury-2 API key — get 10M free tokens at platform.inceptionlabs.ai */
+    val mercuryApiKey: String = "",
 )
