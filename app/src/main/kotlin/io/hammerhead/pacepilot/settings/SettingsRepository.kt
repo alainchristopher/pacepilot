@@ -40,7 +40,7 @@ class SettingsRepository(context: Context) {
             .putInt(KEY_CARB_TARGET_GPH, settings.carbTargetGramsPerHour)
             .putInt(KEY_CARBS_PER_SERVING, settings.carbsPerFuelServing)
             .putInt(KEY_DRINK_INTERVAL_MIN, settings.drinkReminderMinutes)
-            .apply()
+            .commit() // synchronous — ensures service reads the updated value immediately
         _settings.value = settings
     }
 

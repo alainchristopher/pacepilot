@@ -315,7 +315,8 @@ fun PacePilotSettingsScreen(
             onClick = {
                 try {
                     onSave(settings)
-                    Toast.makeText(context, "Settings saved", Toast.LENGTH_SHORT).show()
+                    val status = if (settings.appEnabled) "ON" else "OFF"
+                    Toast.makeText(context, "Saved — PacePilot $status", Toast.LENGTH_SHORT).show()
                 } catch (e: Exception) {
                     Toast.makeText(context, "Save failed: ${e.message}", Toast.LENGTH_LONG).show()
                 }
