@@ -12,3 +12,4 @@ captures/
 .cxx/
 *.hprof
 agent-transcripts/
+*.fit

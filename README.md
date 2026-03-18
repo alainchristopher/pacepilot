@@ -1,6 +1,6 @@
 # PacePilot — AI Cycling Coach for Hammerhead Karoo
 
-Real-time coaching alerts during your ride, powered by rules + optional Gemini AI. Built as a native Karoo extension using the official `karoo-ext` SDK.
+Real-time coaching alerts during your ride, powered by rules + optional AI. Built as a native Karoo extension using the official `karoo-ext` SDK.
 
 ## What it does
 
@@ -9,15 +9,21 @@ PacePilot watches your power, heart rate, cadence, and workout data in real time
 **Rule-based engine** (works offline, no API key needed):
 - 25+ coaching rules across 5 ride modes
 - Zone drift detection, interval compliance, cadence monitoring
-- Fueling reminders, HR:power decoupling alerts
-- Climb pacing, recovery ceiling enforcement
+- Weight-based fueling reminders (reads weight from Karoo profile)
+- HR:power decoupling, climb pacing, multi-climb effort budgeting
+- Pre-climb prep cues, recovery ceiling enforcement
 - Late-ride fatigue protection
 
-**AI layer** (optional, needs Gemini API key + internet):
-- Gemini 2.0 Flash generates human-sounding cues from live context
-- 30-ride rolling history for personalization ("you tend to fade after 90 min")
-- Context caching keeps costs near-zero (~$0.01/ride)
+**AI layer** (optional, needs API key + internet):
+- **Gemini 2.0 Flash** — recommended, context caching, ~$0.01/ride
+- **Mercury-2** — experimental, 1,000+ tokens/sec via Inception Labs (10M free tokens)
+- 30-ride rolling history for personalization
 - Falls back to rule-based if offline — rider always gets a message
+
+**Integrations** (graceful fallback when absent):
+- **NomRide** — carb balance, burn rate, carbs eaten → deficit-aware fueling
+- **7Climb** — distance to summit, climb number → pre-climb prep + effort budget
+- **Headwind** — wind speed, relative wind → context for future wind pacing
 
 ## Ride Modes
 
@@ -32,13 +38,13 @@ PacePilot watches your power, heart rate, cadence, and workout data in real time
 ## Architecture
 
 ```
-telemetry (Karoo SDK streams)
-  → TelemetryAggregator (power, HR, cadence, GPS, workout)
+Karoo streams + NomRide/7Climb/Headwind (when present)
+  → TelemetryAggregator (power, HR, cadence, workout, weight, carbs)
     → RideContext snapshot (every tick)
       → ModeDetector → CoachingEngine
         → Rules evaluate → CooldownManager filters
           → InRideAlert dispatch (static message)
-            → GeminiClient upgrades async (if enabled)
+            → Gemini or Mercury upgrades async (if enabled)
 ```
 
 Key design decisions:
@@ -79,34 +85,39 @@ adb connect <karoo-ip>:5555
 # Install
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 
-# Set Gemini API key (optional — get free key at aistudio.google.com)
+# Set API key via deep link (optional)
 adb shell am start -a android.intent.action.VIEW -d "pacepilot://config?gemini_key=YOUR_KEY"
+# Or for Mercury-2: pacepilot://config?mercury_key=YOUR_KEY&provider=mercury
 ```
 
 ### Uninstall
 
 ```bash
-adb uninstall io.hammerhead.pacepilot.debug
+adb uninstall io.hammerhead.pacepilot.debug   # debug build
+# adb uninstall io.hammerhead.pacepilot       # release build
 ```
 
 ## Configuration
 
 Open PacePilot from the Karoo extensions menu:
 
-- **FTP / Max HR** — Override Karoo profile values (or leave blank to use defaults)
-- **Coaching alerts** — Enable/disable, set frequency (aggressive ↔ quiet)
-- **Fueling reminders** — Time-based with NomRide integration if available
-- **AI coaching** — Toggle Gemini 2.0 Flash, enter API key
-- **Ride mode** — Auto-detect or force a specific mode
+- **App toggle** — Master on/off (PacePilot Active)
+- **FTP / Max HR** — Override Karoo profile (or use weight/HR from Karoo profile)
+- **Coaching alerts** — Enable/disable, fueling reminders, alert frequency
+- **Alert policy** — Min gap between alerts, max alerts per hour
+- **AI coaching** — Choose provider: Gemini 2.0 Flash, Mercury-2, or Off
+- **Snooze / Undo** — 15-min snooze or undo via BonusActions on alerts
 
 ## AI Coaching Details
 
 When enabled, PacePilot uses a two-phase approach:
 
 1. **Instant**: Rule fires → static message shown immediately
-2. **Upgrade**: Gemini gets the coaching event + live telemetry + ride narrative + 30-ride history → generates a personalized message → replaces the static one if it arrives before auto-dismiss
+2. **Upgrade**: AI gets the coaching event + live telemetry + ride narrative + 30-ride history → generates a personalized message → replaces the static one if it arrives before auto-dismiss
 
-The system prompt is cached using Gemini's context caching API, so only the live context (small) is sent per request. Cost is typically <$0.01 per ride.
+**Gemini 2.0 Flash** (recommended): Context caching keeps costs ~$0.01/ride. Free key at [aistudio.google.com](https://aistudio.google.com).
+
+**Mercury-2** (experimental): OpenAI-compatible API via [platform.inceptionlabs.ai](https://platform.inceptionlabs.ai). 10M free tokens. ~1,000+ tokens/sec. No server-side cache — full context sent per call.
 
 ### What the AI sees
 - Current power/HR/cadence zones and trends
@@ -122,23 +133,27 @@ The system prompt is cached using Gemini's context caching API, so only the live
 ## Testing
 
 ```bash
-# Run all 93 unit tests
-./gradlew :app:testDebugUnitTest --tests "io.hammerhead.pacepilot.*"
+# Run all unit tests
+./gradlew :app:testDebugUnitTest
 ```
 
-Tests cover zone calculation, power analysis, workout classification, coaching rules, cooldown logic, mode detection, and ride simulation scenarios.
+Tests cover zone calculation, power analysis, workout classification, coaching rules, cooldown logic, mode detection, ride simulation scenarios, and FIT-based backtest replay.
 
 ## Project Structure
 
 ```
 app/src/main/kotlin/io/hammerhead/pacepilot/
-├── ai/                    # Gemini client, context builder, ride narrative
+├── ai/                    # Gemini/Mercury clients, context builder, ride narrative
 ├── coaching/              # Rules engine (workout, endurance, climb, adaptive)
 ├── detection/             # Ride mode detection and transitions
-├── history/               # 30-ride rolling history persistence
+├── fields/                # Custom data fields (coaching_status, zone_time, ride_score)
+├── fit/                   # FIT developer-field export for coaching events
+├── history/               # 30-ride history, PostRideIntelligence, RideSummaryBuilder
+├── integrations/          # NomRide, 7Climb, Headwind adapters
 ├── model/                 # Data classes (RideContext, CoachingEvent, etc.)
 ├── settings/              # User preferences (SharedPreferences)
-├── telemetry/             # Karoo SDK stream aggregation
+├── state/                 # Active-ride state snapshot and restore
+├── telemetry/             # Karoo SDK stream aggregation, FuelingIntelligence
 ├── util/                  # Zone calculator, extensions
 ├── workout/               # Workout tracking and classification
 ├── MainActivity.kt        # Settings UI (Jetpack Compose)
@@ -150,10 +165,10 @@ app/src/main/kotlin/io/hammerhead/pacepilot/
 - **Kotlin** + Coroutines/Flow for reactive telemetry
 - **karoo-ext 1.1.8** — Hammerhead's official extension SDK
 - **Jetpack Compose + Material3** — Settings UI
-- **OkHttp** — HTTP client for Gemini API
+- **OkHttp** — HTTP client for Gemini/Mercury APIs
 - **kotlinx-serialization** — JSON parsing
 - **Timber** — Structured logging
-- **Gemini 2.0 Flash** — Optional AI coaching layer
+- **Gemini 2.0 Flash** or **Mercury-2** — Optional AI coaching layer
 
 ## Contributing
 
@@ -180,9 +195,8 @@ MIT
 
 ## Roadmap
 
-- [ ] Garmin Connect IQ port
-- [ ] Companion phone app for cross-platform support
-- [ ] TrainingPeaks/Intervals.icu sync
-- [ ] NomRide deep integration
-- [ ] Climb profile pre-loading from route
-- [ ] Post-ride AI summary
+See [docs/pacepilot-ship-prd-v2.1.md](docs/pacepilot-ship-prd-v2.1.md) for the full phased delivery plan.
+
+**Shipped:** Coaching data fields, snooze/undo, FIT export, state resilience, weight-based fueling, NomRide/7Climb/Headwind adapters, pre-climb prep, multi-climb effort budgeting, fueling in climb mode, post-ride summary + patterns, Gemini + Mercury-2 AI providers, app toggle.
+
+**Planned (ship PRD):** Wind-adjusted pacing (Headwind integration), finish-line / negative-split mode, release cadence discipline.
