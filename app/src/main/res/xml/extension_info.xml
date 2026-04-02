@@ -5,6 +5,25 @@
     id="pacepilot"
     scansDevices="false">
 
+    <DataType
+        typeId="coaching_status"
+        displayName="@string/datatype_coaching_status_name"
+        description="@string/datatype_coaching_status_desc"
+        icon="@drawable/ic_pacepilot"
+        graphical="false" />
+    <DataType
+        typeId="zone_time_sec"
+        displayName="@string/datatype_zone_time_name"
+        description="@string/datatype_zone_time_desc"
+        icon="@drawable/ic_pacepilot"
+        graphical="false" />
+    <DataType
+        typeId="ride_score"
+        displayName="@string/datatype_ride_score_name"
+        description="@string/datatype_ride_score_desc"
+        icon="@drawable/ic_pacepilot"
+        graphical="false" />
+
     <BonusAction
         actionId="mode_workout"
         displayName="@string/action_mode_workout" />
@@ -23,6 +42,12 @@
     <BonusAction
         actionId="ack_drink"
         displayName="@string/action_ack_drink" />
+    <BonusAction
+        actionId="snooze_15min"
+        displayName="@string/action_snooze_15" />
+    <BonusAction
+        actionId="undo_snooze"
+        displayName="@string/action_undo_snooze" />
     <BonusAction
         actionId="silence_10min"
         displayName="@string/action_silence" />

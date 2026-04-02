@@ -1,18 +1,28 @@
 package io.hammerhead.pacepilot
 
 import io.hammerhead.karooext.KarooSystemService
+import io.hammerhead.karooext.extension.DataTypeImpl
 import io.hammerhead.karooext.extension.KarooExtension
+import io.hammerhead.karooext.internal.Emitter
+import io.hammerhead.karooext.models.FitEffect
 import io.hammerhead.karooext.models.InRideAlert
 import io.hammerhead.karooext.models.RideState
 import io.hammerhead.pacepilot.coaching.CoachingEngine
 import io.hammerhead.pacepilot.detection.ModeDetector
 import io.hammerhead.pacepilot.detection.ModeTransitionEngine
+import io.hammerhead.pacepilot.fields.PacePilotNumericDataType
+import io.hammerhead.pacepilot.fit.CoachingFitExporter
 import io.hammerhead.pacepilot.history.RideHistoryRepository
+import io.hammerhead.pacepilot.history.PostRideInsightsRepository
+import io.hammerhead.pacepilot.history.PostRideIntelligence
 import io.hammerhead.pacepilot.history.RideSummaryBuilder
 import io.hammerhead.pacepilot.model.ActiveMode
 import io.hammerhead.pacepilot.model.ModeSource
 import io.hammerhead.pacepilot.model.RideMode
+import io.hammerhead.pacepilot.model.currentMode
 import io.hammerhead.pacepilot.settings.SettingsRepository
+import io.hammerhead.pacepilot.state.ActiveRideSnapshot
+import io.hammerhead.pacepilot.state.ActiveRideStateStore
 import io.hammerhead.pacepilot.telemetry.TelemetryAggregator
 import io.hammerhead.pacepilot.telemetry.WorkoutStreamCollector
 import io.hammerhead.pacepilot.util.consumerFlow
@@ -29,10 +39,33 @@ import kotlinx.coroutines.withContext
 import timber.log.Timber
 
 class PacePilotExtension : KarooExtension("pacepilot", "1.0") {
+    override val types: List<DataTypeImpl> by lazy {
+        listOf(
+            PacePilotNumericDataType(extension, "coaching_status") {
+                val now = System.currentTimeMillis() / 1000
+                val ctx = telemetryAggregator.rideContext.value
+                when {
+                    !settingsRepo.current.appEnabled || !isRideActive -> 0.0
+                    ctx.silencedUntilSec > now -> 2.0
+                    else -> 1.0
+                }
+            },
+            PacePilotNumericDataType(extension, "zone_time_sec") {
+                val zone = telemetryAggregator.rideContext.value.powerZone
+                if (zone in 1..7) powerZoneTimeSec[zone - 1].toDouble() else 0.0
+            },
+            PacePilotNumericDataType(extension, "ride_score") {
+                rideScore().toDouble()
+            }
+        )
+    }
 
     private lateinit var karooSystem: KarooSystemService
     private lateinit var settingsRepo: SettingsRepository
     private lateinit var historyRepo: RideHistoryRepository
+    private lateinit var postRideInsightsRepo: PostRideInsightsRepository
+    private lateinit var activeRideStateStore: ActiveRideStateStore
+    private val fitExporter = CoachingFitExporter()
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -53,7 +86,18 @@ class PacePilotExtension : KarooExtension("pacepilot", "1.0") {
 
     private var rideStateJob: Job? = null
     private var zoneTrackingJob: Job? = null
+    private var stateSnapshotJob: Job? = null
     private var isRideActive = false
+
+    private fun rideScore(): Int {
+        val ctx = telemetryAggregator.rideContext.value
+        val base = if (ctx.workout.isActive) {
+            (ctx.workout.complianceScore * 100f).toInt()
+        } else {
+            100 - (ctx.carbDeficitGrams.coerceAtMost(60) / 2) - ctx.hrDecouplingPct.toInt()
+        }
+        return base.coerceIn(0, 100)
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -63,6 +107,8 @@ class PacePilotExtension : KarooExtension("pacepilot", "1.0") {
         karooSystem = KarooSystemService(this)
         settingsRepo = SettingsRepository(this)
         historyRepo = RideHistoryRepository(this)
+        postRideInsightsRepo = PostRideInsightsRepository(this)
+        activeRideStateStore = ActiveRideStateStore(this)
         serviceScope.launch { historyRepo.load() }
 
         // Wire components
@@ -92,6 +138,10 @@ class PacePilotExtension : KarooExtension("pacepilot", "1.0") {
             settingsRepo = settingsRepo,
             historyProvider = { historyRepo.current },
             scope = serviceScope,
+            onEventDispatched = { event, message ->
+                val mode = telemetryAggregator.rideContext.value.currentMode
+                fitExporter.onCoachingEvent(event, message, mode)
+            },
         )
 
         karooSystem.connect {
@@ -107,6 +157,13 @@ class PacePilotExtension : KarooExtension("pacepilot", "1.0") {
         serviceScope.cancel()
         karooSystem.disconnect()
         super.onDestroy()
+    }
+
+    override fun startFit(emitter: Emitter<FitEffect>) {
+        fitExporter.attach(emitter)
+        emitter.setCancellable {
+            fitExporter.detach()
+        }
     }
 
     // ------------------------------------------------------------------
@@ -125,6 +182,7 @@ class PacePilotExtension : KarooExtension("pacepilot", "1.0") {
                         // Keep ride running on pause — coaching resumes on unpause
                     }
                     is RideState.Idle -> {
+                        activeRideStateStore.clear()
                         if (isRideActive) stopRide()
                     }
                 }
@@ -144,6 +202,7 @@ class PacePilotExtension : KarooExtension("pacepilot", "1.0") {
             Timber.i("PacePilot: app disabled — skipping ride start")
             return
         }
+        restoreIfRecentSnapshot()
         isRideActive = true
         Timber.i("PacePilot: ride started")
 
@@ -188,6 +247,14 @@ class PacePilotExtension : KarooExtension("pacepilot", "1.0") {
                 kotlinx.coroutines.delay(1000)
             }
         }
+
+        // Persist active-ride state every 30s so service restarts can recover quickly.
+        stateSnapshotJob = serviceScope.launch {
+            while (true) {
+                saveActiveSnapshot()
+                kotlinx.coroutines.delay(30_000)
+            }
+        }
     }
 
     private fun stopRide() {
@@ -196,7 +263,10 @@ class PacePilotExtension : KarooExtension("pacepilot", "1.0") {
         Timber.i("PacePilot: ride stopped")
         zoneTrackingJob?.cancel()
         zoneTrackingJob = null
+        stateSnapshotJob?.cancel()
+        stateSnapshotJob = null
         coachingEngine.stop()
+        fitExporter.onRideEnd()
 
         // Save ride summary before stopping telemetry
         val ctx = telemetryAggregator.rideContext.value
@@ -213,6 +283,8 @@ class PacePilotExtension : KarooExtension("pacepilot", "1.0") {
                     peakPowerWatts = peakPowerWatts,
                 )
                 historyRepo.saveRide(summary)
+                val insight = PostRideIntelligence.build(historyRepo.current, summary)
+                postRideInsightsRepo.save(insight)
                 }
             }
         }
@@ -225,6 +297,47 @@ class PacePilotExtension : KarooExtension("pacepilot", "1.0") {
         hrZoneTimeSec.fill(0)
         peakPowerWatts = 0
         peakHrBpm = 0
+        activeRideStateStore.clear()
+    }
+
+    private fun saveActiveSnapshot() {
+        val ctx = telemetryAggregator.rideContext.value
+        activeRideStateStore.save(
+            ActiveRideSnapshot(
+                savedAtEpochSec = System.currentTimeMillis() / 1000,
+                rideElapsedSec = ctx.rideElapsedSec,
+                modeName = ctx.currentMode.name,
+                silencedUntilSec = ctx.silencedUntilSec,
+                peakPowerWatts = peakPowerWatts,
+                peakHrBpm = peakHrBpm,
+                powerZoneTimesCsv = powerZoneTimeSec.joinToString(","),
+                hrZoneTimesCsv = hrZoneTimeSec.joinToString(","),
+            )
+        )
+    }
+
+    private fun restoreIfRecentSnapshot() {
+        val snapshot = activeRideStateStore.load() ?: return
+        val ageSec = System.currentTimeMillis() / 1000 - snapshot.savedAtEpochSec
+        if (ageSec > 8 * 3600) {
+            activeRideStateStore.clear()
+            return
+        }
+        parseCsvInto(snapshot.powerZoneTimesCsv, powerZoneTimeSec)
+        parseCsvInto(snapshot.hrZoneTimesCsv, hrZoneTimeSec)
+        peakPowerWatts = snapshot.peakPowerWatts
+        peakHrBpm = snapshot.peakHrBpm
+        telemetryAggregator.updateSilence(snapshot.silencedUntilSec)
+        Timber.i("PacePilot: restored active snapshot (age=${ageSec}s)")
+    }
+
+    private fun parseCsvInto(csv: String, target: IntArray) {
+        if (csv.isBlank()) return
+        csv.split(",").forEachIndexed { idx, token ->
+            if (idx < target.size) {
+                target[idx] = token.toIntOrNull() ?: 0
+            }
+        }
     }
 
     // ------------------------------------------------------------------
@@ -298,6 +411,35 @@ class PacePilotExtension : KarooExtension("pacepilot", "1.0") {
                         autoDismissMs = 3_000,
                         backgroundColor = R.color.alert_bg_fuel,
                         textColor = R.color.alert_text_fuel,
+                    )
+                )
+            }
+            "snooze_15min" -> {
+                val untilSec = System.currentTimeMillis() / 1000 + 900
+                telemetryAggregator.updateSilence(untilSec)
+                karooSystem.dispatch(
+                    InRideAlert(
+                        id = "pp_snoozed_15",
+                        icon = R.drawable.ic_pacepilot,
+                        title = "PacePilot",
+                        detail = "Snoozed for 15 min.",
+                        autoDismissMs = 4_000,
+                        backgroundColor = R.color.alert_bg_coaching,
+                        textColor = R.color.alert_text_coaching,
+                    )
+                )
+            }
+            "undo_snooze" -> {
+                telemetryAggregator.updateSilence(0L)
+                karooSystem.dispatch(
+                    InRideAlert(
+                        id = "pp_snooze_undo",
+                        icon = R.drawable.ic_pacepilot,
+                        title = "PacePilot",
+                        detail = "Snooze cleared.",
+                        autoDismissMs = 3_000,
+                        backgroundColor = R.color.alert_bg_positive,
+                        textColor = R.color.alert_text_positive,
                     )
                 )
             }

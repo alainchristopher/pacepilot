@@ -21,6 +21,9 @@ data class RideContext(
     val variabilityIndex: Float = 1f,    // NP / avg power
     val powerZone: Int = 0,             // 1-7
     val ftp: Int = 250,                 // from UserProfile or settings
+    // Karoo user profile power zones (min/max watts per zone, index 0 = Z1)
+    // Empty = fall back to % FTP calculation
+    val powerZoneBounds: List<Pair<Int, Int>> = emptyList(),
 
     // Heart rate
     val heartRateBpm: Int = 0,
@@ -32,12 +35,17 @@ data class RideContext(
     // Empty = fall back to % maxHr calculation
     val hrZoneBounds: List<Pair<Int, Int>> = emptyList(),
 
+    // Rider profile
+    val weightKg: Float = 75f,          // from UserProfile (Karoo settings)
+
     // Cadence
     val cadenceRpm: Int = 0,
 
     // Speed & distance
     val speedKmh: Float = 0f,
     val distanceKm: Float = 0f,
+    val windSpeedKmh: Float = 0f,
+    val relativeWindPct: Float = 0f,
 
     // Elevation & terrain
     val elevationGradePct: Float = 0f,

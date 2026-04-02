@@ -29,6 +29,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.hammerhead.pacepilot.ai.LlmProvider
+import io.hammerhead.pacepilot.history.PostRideInsight
+import io.hammerhead.pacepilot.history.PostRideInsightsRepository
 import io.hammerhead.pacepilot.model.RideMode
 import io.hammerhead.pacepilot.settings.SettingsRepository
 import io.hammerhead.pacepilot.settings.UserSettings
@@ -50,16 +52,19 @@ private val CardShape = RoundedCornerShape(12.dp)
 class MainActivity : ComponentActivity() {
 
     private lateinit var settingsRepo: SettingsRepository
+    private lateinit var postRideInsightsRepo: PostRideInsightsRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         settingsRepo = SettingsRepository(this)
+        postRideInsightsRepo = PostRideInsightsRepository(this)
         handleDeepLink()
 
         setContent {
             PacePilotSettingsScreen(
                 initial = settingsRepo.current,
                 onSave = { settingsRepo.save(it) },
+                postRideInsightsRepo = postRideInsightsRepo,
             )
         }
     }
@@ -105,9 +110,13 @@ class MainActivity : ComponentActivity() {
 fun PacePilotSettingsScreen(
     initial: UserSettings,
     onSave: (UserSettings) -> Unit,
+    postRideInsightsRepo: PostRideInsightsRepository,
 ) {
     var settings by remember { mutableStateOf(initial) }
     val context = LocalContext.current
+    val latestInsight by produceState<PostRideInsight?>(initialValue = null) {
+        value = postRideInsightsRepo.load()
+    }
 
     Column(
         modifier = Modifier
@@ -132,6 +141,21 @@ fun PacePilotSettingsScreen(
                 fontSize = 13.sp,
                 letterSpacing = 0.5.sp,
             )
+        }
+
+        if (latestInsight != null) {
+            SettingsCard(title = "POST-RIDE INTELLIGENCE") {
+                Text(
+                    latestInsight!!.summary,
+                    color = TextPrimary,
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp,
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                latestInsight!!.patterns.take(2).forEach { pattern ->
+                    Text("• $pattern", color = TextSecondary, fontSize = 11.sp)
+                }
+            }
         }
 
         // --- Master App Toggle ---
@@ -234,6 +258,26 @@ fun PacePilotSettingsScreen(
                 color = TextTertiary,
                 fontSize = 11.sp,
             )
+
+            Spacer(modifier = Modifier.height(10.dp))
+            InputField(
+                label = "Min alert gap (sec)",
+                value = settings.minAlertGapSec.toString(),
+                placeholder = "45",
+                keyboardType = KeyboardType.Number,
+            ) { v ->
+                settings = settings.copy(minAlertGapSec = (v.toIntOrNull() ?: 45).coerceIn(10, 300))
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+            InputField(
+                label = "Max alerts / hour",
+                value = settings.maxAlertsPerHour.toString(),
+                placeholder = "15",
+                keyboardType = KeyboardType.Number,
+            ) { v ->
+                settings = settings.copy(maxAlertsPerHour = (v.toIntOrNull() ?: 15).coerceIn(4, 40))
+            }
         }
 
         // --- AI Card ---

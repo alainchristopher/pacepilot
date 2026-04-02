@@ -24,6 +24,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import timber.log.Timber
+import java.util.ArrayDeque
 
 /**
  * The main coaching loop.
@@ -50,6 +51,7 @@ class CoachingEngine(
     private val settingsRepo: SettingsRepository,
     private val historyProvider: () -> RideHistory,
     private val scope: CoroutineScope,
+    private val onEventDispatched: ((CoachingEvent, String) -> Unit)? = null,
 ) {
     private var tickJob: Job? = null
     private var narrativeJob: Job? = null
@@ -58,6 +60,7 @@ class CoachingEngine(
     // AI layer — polymorphic; null means rules-only mode
     private var aiClient: AiCoachingClient? = null
     val narrative = RideNarrative()
+    private val alertTimesSec = ArrayDeque<Long>()
 
     companion object {
         const val TICK_INTERVAL_MS = 5_000L
@@ -111,6 +114,7 @@ class CoachingEngine(
             scope.launch { client.endRide() }
         }
         narrative.reset()
+        alertTimesSec.clear()
 
         Timber.i("CoachingEngine: stopped")
     }
@@ -155,14 +159,16 @@ class CoachingEngine(
         if (candidates.isEmpty()) return
 
         val cd = cooldown ?: return
+        val nowSec = System.currentTimeMillis() / 1000
         val toFire = candidates
             .sortedByDescending { it.priority.level }
             .firstOrNull { event ->
                 if (!settings.fuelingAlertsEnabled && event.alertStyle == AlertStyle.FUEL) return@firstOrNull false
-                cd.canFire(event, ctx)
+                cd.canFire(event, ctx) && passesAlertPolicy(event, settings, nowSec)
             } ?: return
 
         cd.recordFired(toFire.ruleId, toFire.priority)
+        recordAlert(nowSec)
 
         val client = aiClient
         if (client != null) {
@@ -185,10 +191,18 @@ class CoachingEngine(
 
     private fun gatherCandidates(ctx: RideContext, settings: UserSettings): List<CoachingEvent> =
         when (ctx.currentMode) {
-            RideMode.WORKOUT -> WorkoutCoachingRules.evaluateAll(ctx, settings.minEffortCadenceRpm)
+            RideMode.WORKOUT -> WorkoutCoachingRules.evaluateAll(
+                ctx = ctx,
+                settingsMinCadence = settings.minEffortCadenceRpm,
+                fuelingThresholdGrams = settings.fuelingAlertThresholdGrams,
+            )
             RideMode.ENDURANCE -> EnduranceCoachingRules.evaluateAll(ctx) +
                 if (ctx.isOnClimb) ClimbCoachingRules.evaluateAll(ctx) else emptyList()
-            RideMode.CLIMB_FOCUSED -> ClimbCoachingRules.evaluateAll(ctx)
+            RideMode.CLIMB_FOCUSED -> ClimbCoachingRules.evaluateAll(ctx) +
+                listOfNotNull(
+                    EnduranceCoachingRules.fuelTimeBasedReminder(ctx),
+                    EnduranceCoachingRules.drinkReminder(ctx, settings.drinkReminderMinutes),
+                )
             RideMode.ADAPTIVE, RideMode.RECOVERY -> AdaptiveCoachingRules.evaluateAll(ctx)
         }
 
@@ -208,6 +222,38 @@ class CoachingEngine(
                 textColor = textColor,
             )
         )
+        onEventDispatched?.invoke(event, detail)
+    }
+
+    private fun passesAlertPolicy(
+        event: CoachingEvent,
+        settings: UserSettings,
+        nowSec: Long,
+    ): Boolean {
+        // Critical safety-type prompts always bypass policy limits.
+        if (event.priority == CoachingPriority.CRITICAL) return true
+
+        // Keep only 1h window.
+        while (alertTimesSec.isNotEmpty() && nowSec - alertTimesSec.first() > 3600) {
+            alertTimesSec.removeFirst()
+        }
+        if (alertTimesSec.size >= settings.maxAlertsPerHour) {
+            Timber.d("CoachingEngine: policy block maxAlertsPerHour=%d", settings.maxAlertsPerHour)
+            return false
+        }
+        val last = alertTimesSec.lastOrNull()
+        if (last != null && nowSec - last < settings.minAlertGapSec) {
+            Timber.d("CoachingEngine: policy block minAlertGapSec=%d", settings.minAlertGapSec)
+            return false
+        }
+        return true
+    }
+
+    private fun recordAlert(nowSec: Long) {
+        alertTimesSec.addLast(nowSec)
+        while (alertTimesSec.isNotEmpty() && nowSec - alertTimesSec.first() > 3600) {
+            alertTimesSec.removeFirst()
+        }
     }
 
     private fun alertAppearance(style: AlertStyle): Triple<Int, Int, String> = when (style) {

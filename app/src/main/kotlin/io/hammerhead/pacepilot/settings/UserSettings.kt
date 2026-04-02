@@ -22,6 +22,10 @@ data class UserSettings(
      * 1.0 = spec defaults, 2.0 = half as many alerts, 0.5 = twice as many.
      */
     val cooldownMultiplier: Float = 1.0f,
+    /** Hard floor between alerts (non-critical), in seconds */
+    val minAlertGapSec: Int = 45,
+    /** Max non-critical alerts in rolling 1 hour window */
+    val maxAlertsPerHour: Int = 15,
 
     /**
      * Forced mode. null = auto-detect cascade.

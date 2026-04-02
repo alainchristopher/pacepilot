@@ -9,6 +9,13 @@ import io.hammerhead.karooext.models.UserProfile
 import io.hammerhead.pacepilot.model.ActiveMode
 import io.hammerhead.pacepilot.model.IntervalPhase
 import io.hammerhead.pacepilot.model.RideContext
+import io.hammerhead.pacepilot.coaching.FuelingIntelligence
+import io.hammerhead.pacepilot.integrations.NomRideAdapter
+import io.hammerhead.pacepilot.integrations.NomRideSignal
+import io.hammerhead.pacepilot.integrations.SevenClimbAdapter
+import io.hammerhead.pacepilot.integrations.SevenClimbSignal
+import io.hammerhead.pacepilot.integrations.HeadwindAdapter
+import io.hammerhead.pacepilot.integrations.HeadwindSignal
 import io.hammerhead.pacepilot.util.ZoneCalculator
 import io.hammerhead.pacepilot.settings.SettingsRepository
 import io.hammerhead.pacepilot.workout.WorkoutTracker
@@ -45,6 +52,12 @@ class TelemetryAggregator(
     private var maxHrFromProfile = 185
     private var rideStartEpochSec = 0L
     private var lastTickSec = 0L
+    private val nomRideAdapter = NomRideAdapter(karooSystem, scope)
+    @Volatile private var nomRideSignal: NomRideSignal? = null
+    private val sevenClimbAdapter = SevenClimbAdapter(karooSystem, scope)
+    @Volatile private var sevenClimbSignal: SevenClimbSignal? = null
+    private val headwindAdapter = HeadwindAdapter(karooSystem, scope)
+    @Volatile private var headwindSignal: HeadwindSignal? = null
 
     private val streamJobs = mutableListOf<Job>()
 
@@ -64,11 +77,72 @@ class TelemetryAggregator(
         collectClimbStreams() // adds to streamJobs internally
         streamJobs += scope.launch { collectWorkoutState() }
         streamJobs += scope.launch { tickLoop() }
+        nomRideAdapter.start { signal ->
+            val existing = nomRideSignal
+            nomRideSignal = NomRideSignal(
+                carbBalanceGrams = signal.carbBalanceGrams ?: existing?.carbBalanceGrams,
+                burnRateGph = signal.burnRateGph ?: existing?.burnRateGph,
+                carbsEatenGrams = signal.carbsEatenGrams ?: existing?.carbsEatenGrams,
+                waterMl = signal.waterMl ?: existing?.waterMl,
+                updatedAtEpochSec = signal.updatedAtEpochSec,
+            )
+        }
+        sevenClimbAdapter.start { signal ->
+            val existing = sevenClimbSignal
+            sevenClimbSignal = SevenClimbSignal(
+                distanceToTopM = signal.distanceToTopM ?: existing?.distanceToTopM,
+                climbNumber = signal.climbNumber ?: existing?.climbNumber,
+                totalClimbs = signal.totalClimbs ?: existing?.totalClimbs,
+                gradePct = signal.gradePct ?: existing?.gradePct,
+                updatedAtEpochSec = signal.updatedAtEpochSec,
+            )
+            // Apply overlays immediately; native streams remain fallback.
+            if (signal.distanceToTopM != null) {
+                _context.update { it.copy(distanceToClimbTopM = signal.distanceToTopM) }
+            }
+            if (signal.climbNumber != null || signal.totalClimbs != null) {
+                _context.update {
+                    it.copy(
+                        climbNumber = signal.climbNumber ?: it.climbNumber,
+                        totalClimbsOnRoute = signal.totalClimbs ?: it.totalClimbsOnRoute,
+                    )
+                }
+            }
+            if (signal.gradePct != null) {
+                _context.update {
+                    it.copy(
+                        elevationGradePct = signal.gradePct,
+                        isOnClimb = signal.gradePct > 1.5f,
+                        isDescending = signal.gradePct < -1.5f,
+                    )
+                }
+            }
+        }
+        headwindAdapter.start { signal ->
+            val existing = headwindSignal
+            headwindSignal = HeadwindSignal(
+                windSpeedKmh = signal.windSpeedKmh ?: existing?.windSpeedKmh,
+                relativeWindPct = signal.relativeWindPct ?: existing?.relativeWindPct,
+                updatedAtEpochSec = signal.updatedAtEpochSec,
+            )
+            _context.update {
+                it.copy(
+                    windSpeedKmh = signal.windSpeedKmh ?: it.windSpeedKmh,
+                    relativeWindPct = signal.relativeWindPct ?: it.relativeWindPct,
+                )
+            }
+        }
     }
 
     fun stop() {
         streamJobs.forEach { it.cancel() }
         streamJobs.clear()
+        nomRideAdapter.stop()
+        sevenClimbAdapter.stop()
+        headwindAdapter.stop()
+        nomRideSignal = null
+        sevenClimbSignal = null
+        headwindSignal = null
         powerAnalyzer.resetForNewRide()
         hrAnalyzer.resetForNewRide()
     }
@@ -120,8 +194,23 @@ class TelemetryAggregator(
             val hrZoneBounds = profile.heartRateZones
                 .map { zone -> zone.min to zone.max }
 
-            Timber.d("UserProfile: ftp=$ftp maxHr=$maxHr hrZones=${hrZoneBounds.size}")
-            _context.update { it.copy(ftp = ftp, maxHr = maxHr, hrZoneBounds = hrZoneBounds) }
+            // Use Karoo's actual power zone bounds if configured
+            val powerZoneBounds = profile.powerZones
+                .map { zone -> zone.min to zone.max }
+
+            // Weight in kg (Karoo stores in kg regardless of preferred unit display)
+            val weightKg = profile.weight.takeIf { it > 0f } ?: 75f
+
+            Timber.d("UserProfile: ftp=$ftp maxHr=$maxHr weight=${weightKg}kg hrZones=${hrZoneBounds.size} powerZones=${powerZoneBounds.size}")
+            _context.update {
+                it.copy(
+                    ftp = ftp,
+                    maxHr = maxHr,
+                    hrZoneBounds = hrZoneBounds,
+                    powerZoneBounds = powerZoneBounds,
+                    weightKg = weightKg,
+                )
+            }
         }
     }
 
@@ -335,25 +424,38 @@ class TelemetryAggregator(
     }
 
     private suspend fun tickLoop() {
-        val carbRate = settingsRepo.current.carbTargetGramsPerHour
         while (true) {
             val nowSec = System.currentTimeMillis() / 1000
             val elapsed = nowSec - rideStartEpochSec
+            val current = _context.value
             val z1Minutes = if (powerAnalyzer.isSustainedZ1(60)) {
-                (_context.value.minutesInZ1Sustained + (1f / 60f)).coerceAtMost(30f)
+                (current.minutesInZ1Sustained + (1f / 60f)).coerceAtMost(30f)
             } else 0f
 
-            // Compute target carbs based on elapsed time
+            val baseRate = settingsRepo.current.carbTargetGramsPerHour
+            val carbRate = FuelingIntelligence.recommendedCarbsPerHour(current, baseRate)
+
+            // Compute target carbs based on elapsed time and dynamic demand.
             val elapsedHours = elapsed / 3600f
-            val targetCarbs = (elapsedHours * carbRate).toInt()
+            val internalTargetCarbs = (elapsedHours * carbRate).toInt()
+            val external = nomRideSignal?.takeIf { it.isFresh }
+            val targetCarbs = external?.carbsEatenGrams?.let { eaten ->
+                // If NomRide provides balance and eaten, derive a target that matches their accounting.
+                val balance = external.carbBalanceGrams ?: 0
+                (eaten - balance).coerceAtLeast(0)
+            } ?: internalTargetCarbs
+            val consumed = external?.carbsEatenGrams ?: current.carbsConsumedGrams
+            val deficit = external?.carbBalanceGrams?.let { (-it).coerceAtLeast(0) }
+                ?: (targetCarbs - consumed).coerceAtLeast(0)
 
             _context.update { c ->
                 c.copy(
                     rideElapsedSec = elapsed,
                     isRecording = true,
                     minutesInZ1Sustained = z1Minutes,
+                    carbsConsumedGrams = consumed,
                     carbTargetGrams = targetCarbs,
-                    carbDeficitGrams = (targetCarbs - c.carbsConsumedGrams).coerceAtLeast(0),
+                    carbDeficitGrams = deficit,
                 )
             }
 

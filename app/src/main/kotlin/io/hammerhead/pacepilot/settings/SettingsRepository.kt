@@ -29,6 +29,8 @@ class SettingsRepository(context: Context) {
             .putBoolean(KEY_ALERTS_ENABLED, settings.alertsEnabled)
             .putBoolean(KEY_FUELING_ALERTS, settings.fuelingAlertsEnabled)
             .putFloat(KEY_COOLDOWN_MULT, settings.cooldownMultiplier)
+            .putInt(KEY_MIN_ALERT_GAP_SEC, settings.minAlertGapSec)
+            .putInt(KEY_MAX_ALERTS_PER_HOUR, settings.maxAlertsPerHour)
             .putString(KEY_FORCED_MODE, settings.forcedMode?.name)
             .putInt(KEY_FUEL_THRESHOLD_G, settings.fuelingAlertThresholdGrams)
             .putFloat(KEY_CLIMB_GRAD_PCT, settings.climbRouteGradientThresholdPct)
@@ -51,6 +53,8 @@ class SettingsRepository(context: Context) {
         alertsEnabled = prefs.getBoolean(KEY_ALERTS_ENABLED, true),
         fuelingAlertsEnabled = prefs.getBoolean(KEY_FUELING_ALERTS, true),
         cooldownMultiplier = prefs.getFloat(KEY_COOLDOWN_MULT, 1.0f),
+        minAlertGapSec = prefs.getInt(KEY_MIN_ALERT_GAP_SEC, 45),
+        maxAlertsPerHour = prefs.getInt(KEY_MAX_ALERTS_PER_HOUR, 15),
         forcedMode = prefs.getString(KEY_FORCED_MODE, null)?.let {
             runCatching { RideMode.valueOf(it) }.getOrNull()
         },
@@ -76,6 +80,8 @@ class SettingsRepository(context: Context) {
         private const val KEY_ALERTS_ENABLED = "alerts_enabled"
         private const val KEY_FUELING_ALERTS = "fueling_alerts"
         private const val KEY_COOLDOWN_MULT = "cooldown_multiplier"
+        private const val KEY_MIN_ALERT_GAP_SEC = "min_alert_gap_sec"
+        private const val KEY_MAX_ALERTS_PER_HOUR = "max_alerts_per_hour"
         private const val KEY_FORCED_MODE = "forced_mode"
         private const val KEY_FUEL_THRESHOLD_G = "fuel_threshold_g"
         private const val KEY_CLIMB_GRAD_PCT = "climb_grad_pct"

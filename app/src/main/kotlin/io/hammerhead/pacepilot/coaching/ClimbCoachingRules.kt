@@ -12,6 +12,27 @@ import kotlin.math.roundToInt
  * Coaching rules for CLIMB_FOCUSED mode and temporary climb coaching during ENDURANCE.
  */
 object ClimbCoachingRules {
+    /**
+     * Route-aware preparation cue before the climb starts.
+     */
+    fun preClimbPrep(ctx: RideContext): CoachingEvent? {
+        if (!ctx.hasRoute || ctx.isOnClimb) return null
+        val distToTop = ctx.distanceToClimbTopM ?: return null
+        if (distToTop !in 1200f..3500f) return null
+
+        val message = when {
+            ctx.carbDeficitGrams > 15 -> "Climb soon. Fuel + spin easy."
+            else -> "Climb soon. Shift early, spin."
+        }
+        return CoachingEvent(
+            ruleId = RuleId.PRE_CLIMB_PREP,
+            message = message,
+            priority = CoachingPriority.HIGH,
+            alertStyle = AlertStyle.COACHING,
+            suppressIfFiredInLastSec = 600,
+        )
+    }
+
 
     /**
      * Climb entry — fired once when entering a climb.
@@ -119,7 +140,7 @@ object ClimbCoachingRules {
         // Engine suppression handles de-duplication
         return CoachingEvent(
             ruleId = RuleId.CLIMB_DESCENT,
-            message = "Descending. Recover and fuel up.",
+            message = "Descending. Recover + fuel.",
             priority = CoachingPriority.MEDIUM,
             alertStyle = AlertStyle.FUEL,
             suppressIfFiredInLastSec = 600,
@@ -146,10 +167,37 @@ object ClimbCoachingRules {
         )
     }
 
+    /**
+     * Multi-climb effort budget: preserve headroom for remaining climbs.
+     */
+    fun climbBudgetPacing(ctx: RideContext): CoachingEvent? {
+        if (!ctx.isOnClimb || ctx.ftp <= 0) return null
+        if (ctx.totalClimbsOnRoute < 2) return null
+
+        val remaining = (ctx.totalClimbsOnRoute - ctx.climbNumber + 1).coerceAtLeast(1)
+        val budgetPct = when {
+            remaining >= 3 -> 88
+            remaining == 2 -> 92
+            else -> 96
+        }
+        val budgetWatts = ctx.ftp * budgetPct / 100
+        if (ctx.power30sAvg <= budgetWatts + 10) return null
+        val overBy = ctx.power30sAvg - budgetWatts
+        return CoachingEvent(
+            ruleId = RuleId.CLIMB_BUDGET,
+            message = "Save it. ${remaining - 1} left. -${overBy}W.",
+            priority = CoachingPriority.HIGH,
+            alertStyle = AlertStyle.WARNING,
+            suppressIfFiredInLastSec = 180,
+        )
+    }
+
     fun evaluateAll(ctx: RideContext): List<CoachingEvent> =
         listOfNotNull(
+            preClimbPrep(ctx),
             climbEntry(ctx),
             climbPowerCeiling(ctx),
+            climbBudgetPacing(ctx),
             climbCadenceDrop(ctx),
             climbSummitNear(ctx),
             climbDescent(ctx),

@@ -76,7 +76,7 @@ class WorkoutTypeAwareRulesTest {
         val ctx = effortContextTyped(WorkoutType.THRESHOLD, power30sAvg = 263, targetHigh = 250)
         val event = WorkoutCoachingRules.powerAboveTarget(ctx)
         assertNotNull(event)
-        assertTrue(event!!.message.contains("threshold", ignoreCase = true))
+        assertTrue(event!!.message.contains("ceiling", ignoreCase = true) || event.message.contains("back off", ignoreCase = true))
     }
 
     @Test

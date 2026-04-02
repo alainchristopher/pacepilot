@@ -70,6 +70,8 @@ object RuleId {
 
     // Climb
     const val CLIMB_ENTRY = "climb_entry"
+    const val PRE_CLIMB_PREP = "pre_climb_prep"
+    const val CLIMB_BUDGET = "climb_budget"
     const val CLIMB_POWER_CEILING = "climb_power_ceiling"
     const val CLIMB_CADENCE_DROP = "climb_cadence_drop"
     const val CLIMB_SUMMIT_NEAR = "climb_summit_near"

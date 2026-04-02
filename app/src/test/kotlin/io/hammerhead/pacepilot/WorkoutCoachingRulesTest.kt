@@ -43,7 +43,7 @@ class WorkoutCoachingRulesTest {
         val event = WorkoutCoachingRules.preIntervalAlert(ctx)
         assertNotNull(event)
         assertEquals(RuleId.FIRST_INTERVAL, event!!.ruleId)
-        assertTrue(event.message.contains("First effort block"))
+        assertTrue(event.message.contains("First", ignoreCase = true))
     }
 
     // ------------------------------------------------------------------
@@ -58,7 +58,7 @@ class WorkoutCoachingRulesTest {
         assertNotNull(event)
         assertEquals(RuleId.POWER_ABOVE_TARGET, event!!.ruleId)
         assertEquals(CoachingPriority.CRITICAL, event.priority)
-        assertTrue(event.message.contains("above target"))
+        assertTrue(event.message.contains("over", ignoreCase = true))
     }
 
     @Test

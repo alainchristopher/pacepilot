@@ -186,6 +186,7 @@ OUTPUT RULES — NON-NEGOTIABLE:
         if (ctx.rideElapsedSec > 1200) {
             appendLine()
             appendLine("## Nutrition")
+            appendLine("Rider: ${ctx.weightKg.toInt()}kg · FTP ${ctx.ftp}W (${if (ctx.ftp > 0) "%.1f".format(ctx.power30sAvg.toFloat() / ctx.ftp * 100) else "?"}% intensity)")
             appendLine("Carbs: ${ctx.carbsConsumedGrams}g consumed / ${ctx.carbTargetGrams}g target" +
                 if (ctx.carbDeficitGrams > 10) " · deficit ${ctx.carbDeficitGrams}g" else " · on track")
             val msSinceEat = if (ctx.lastFuelAckEpochSec > 0)

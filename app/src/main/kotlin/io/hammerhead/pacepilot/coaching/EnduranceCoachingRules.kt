@@ -54,11 +54,18 @@ object EnduranceCoachingRules {
             System.currentTimeMillis() / 1000 - ctx.lastFuelAckEpochSec else ctx.rideElapsedSec
         val minInterval = if (ctx.rideElapsedSec > 7200) 1800L else 2700L
 
+        val drinkDue = run {
+            val sinceLastDrink = if (ctx.lastDrinkAckEpochSec > 0)
+                System.currentTimeMillis() / 1000 - ctx.lastDrinkAckEpochSec else ctx.rideElapsedSec
+            sinceLastDrink >= 20 * 60
+        }
+        val drinkSuffix = if (drinkDue) " Sip too." else ""
+
         // Deficit-based: fire if deficit > 15g AND haven't eaten recently
         if (ctx.carbDeficitGrams > 15 && sinceLastEat >= 1200) {
             return CoachingEvent(
                 ruleId = RuleId.FUEL_TIME_BASED,
-                message = "Carb deficit ${ctx.carbDeficitGrams}g. Eat now.",
+                message = "Eat now. ${ctx.carbDeficitGrams}g deficit.$drinkSuffix",
                 priority = CoachingPriority.HIGH,
                 alertStyle = AlertStyle.FUEL,
                 suppressIfFiredInLastSec = 1200,
@@ -70,7 +77,7 @@ object EnduranceCoachingRules {
 
         return CoachingEvent(
             ruleId = RuleId.FUEL_TIME_BASED,
-            message = "Time to eat. ${ctx.carbsConsumedGrams}g so far.",
+            message = "Time to eat.$drinkSuffix",
             priority = CoachingPriority.MEDIUM,
             alertStyle = AlertStyle.FUEL,
             suppressIfFiredInLastSec = minInterval.toInt(),
@@ -109,7 +116,7 @@ object EnduranceCoachingRules {
 
         return CoachingEvent(
             ruleId = RuleId.HR_DECOUPLING,
-            message = "HR drifting vs power. Protect the effort.",
+            message = "HR drift. Protect effort.",
             priority = CoachingPriority.MEDIUM,
             alertStyle = AlertStyle.COACHING,
             suppressIfFiredInLastSec = 1800, // once per 30 min
@@ -133,7 +140,7 @@ object EnduranceCoachingRules {
 
         return CoachingEvent(
             ruleId = RuleId.PROTECT_LAST_HOUR,
-            message = "Protect the last hour. Stay in Z2.",
+            message = "Protect last hour. Stay Z2.",
             priority = CoachingPriority.HIGH,
             alertStyle = AlertStyle.COACHING,
             suppressIfFiredInLastSec = 1800,
@@ -175,7 +182,7 @@ object EnduranceCoachingRules {
         val z2Upper = ZoneCalculator.powerZoneUpperWatts(2, ctx.ftp)
         val inZ2 = ctx.power3minAvg in z2Lower..z2Upper
 
-        val msg = if (inZ2) "Settled in nicely. Z2 on target." else "Find your rhythm. Settle into Z2."
+        val msg = if (inZ2) "Settled in. Z2 on target." else "Find rhythm. Settle in Z2."
         val style = if (inZ2) AlertStyle.POSITIVE else AlertStyle.COACHING
 
         return CoachingEvent(

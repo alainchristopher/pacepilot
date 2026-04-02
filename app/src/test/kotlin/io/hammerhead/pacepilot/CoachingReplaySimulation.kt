@@ -22,7 +22,11 @@ class CoachingReplaySimulation {
             RideMode.WORKOUT -> WorkoutCoachingRules.evaluateAll(ctx, 75)
             RideMode.ENDURANCE -> EnduranceCoachingRules.evaluateAll(ctx) +
                 if (ctx.isOnClimb) ClimbCoachingRules.evaluateAll(ctx) else emptyList()
-            RideMode.CLIMB_FOCUSED -> ClimbCoachingRules.evaluateAll(ctx)
+            RideMode.CLIMB_FOCUSED -> ClimbCoachingRules.evaluateAll(ctx) +
+                listOfNotNull(
+                    EnduranceCoachingRules.fuelTimeBasedReminder(ctx),
+                    EnduranceCoachingRules.drinkReminder(ctx, 20),
+                )
             RideMode.ADAPTIVE, RideMode.RECOVERY -> AdaptiveCoachingRules.evaluateAll(ctx)
         }
 
@@ -601,5 +605,182 @@ class CoachingReplaySimulation {
         }
 
         runSimulation("Recovery Ride — keeps going too hard", frames)
+    }
+
+    // ─── Scenario 8: Real ride — March 15 2026, 40km, 675m elevation ────────
+    //
+    // Source: Karoo-Morning_Ride-2026-03-15-0943.fit
+    // No power meter — HR-only. FTP=250 set on device. Weight ~75kg assumed.
+    // Two major climbs:
+    //   - Climb 1: t=87min, 10min, +127m, avg HR ~132, ~6% grade
+    //   - Climb 2: t=111min, 16min, +216m, avg HR ~147, ~8-9% grade (hardest)
+    // Max HR hit: 179bpm on climb 2 (t=125min, 9.5% grade)
+    // Carbs: NomRide not running — all carb_burned/eaten/balance = 0 in file.
+    // Mode: CLIMB_FOCUSED (675m gain, >30% route above 4% grade)
+    //
+    // HR zones used (maxHR=179 from file):
+    //   Z1 <107, Z2 107-125, Z3 125-143, Z4 143-161, Z5 161+
+    @Test
+    fun `real ride march 15 - 40km 675m climb focused hr only`() {
+        val rideFtp = 250
+        val rideMaxHr = 179
+        val rideWeight = 75f
+
+        // HR curve derived from 2-min sampled FIT data, interpolated second-by-second
+        // Segments: warmup → rolling Z2/Z3 → climb1 → descent → climb2 (hardest)
+        fun hrAtSec(sec: Long): Int = when {
+            sec < 300   -> 75 + (sec * 27 / 300).toInt()         // warmup to 102
+            sec < 900   -> 102 + (sec - 300).toInt() * 8 / 600  // 102→110
+            sec < 1800  -> 110 + (sin(sec * 0.008) * 12).toInt() + 15 // rolling Z2 ~125
+            sec < 2700  -> 125 + (sin(sec * 0.006) * 8).toInt()  // 125-133 Z2/Z3
+            sec < 3300  -> 130 + (sin(sec * 0.005) * 7).toInt()  // 130-137
+            sec < 3600  -> 133 + (sin(sec * 0.004) * 6).toInt()  // 133-139
+            sec < 4200  -> 120 + (sin(sec * 0.01) * 8).toInt()   // brief easier section ~120
+            sec < 4700  -> 128 + (sin(sec * 0.006) * 7).toInt()  // 128-135
+            sec < 5200  -> 133 + (sin(sec * 0.005) * 6).toInt()  // 133-139
+            // Climb 1 starts ~t=5200 (87min), 10min, grade 4-7%
+            sec < 5800  -> 132 + (sec - 5200).toInt() * 20 / 600  // 132→152 building
+            sec < 5880  -> 152 + (sin(sec * 0.01) * 5).toInt()   // summit plateau ~152
+            // Short descent + flat
+            sec < 6300  -> 145 - (sec - 5880).toInt() * 30 / 420  // 145→131 recovery descent
+            sec < 6500  -> 115 + (sin(sec * 0.01) * 8).toInt()   // fast descent ~115-123
+            sec < 6700  -> 110 + (sin(sec * 0.008) * 7).toInt()  // 110-117
+            // Climb 2 starts ~t=6700 (111min), 16min, grade 6-11% — the big one
+            sec < 7000  -> 130 + (sec - 6700).toInt() * 14 / 300 // 130→144
+            sec < 7300  -> 144 + (sec - 7000).toInt() * 10 / 300 // 144→154
+            sec < 7600  -> 154 + (sec - 7300).toInt() * 15 / 300 // 154→169
+            sec < 7700  -> 169 + (sec - 7600).toInt() * 8 / 100  // 169→177
+            sec < 7800  -> 177 + (sin(sec * 0.02) * 2).toInt()   // 177-179 peak effort
+            sec < 8000  -> 179 - (sec - 7800).toInt() * 20 / 200 // 179→159 summit
+            // Final descent + end
+            else        -> 155 - (sec - 8000).toInt() * 25 / 379 // 155→130 cooldown descent
+        }.coerceIn(70, rideMaxHr)
+
+        fun gradeAtSec(sec: Long): Float = when {
+            sec < 300   -> 0.0f
+            sec < 900   -> -0.8f + (sin(sec * 0.01) * 1.5).toFloat()
+            sec < 1800  -> 0.5f + (sin(sec * 0.008) * 1.5).toFloat()
+            sec < 2700  -> 0.7f + (sin(sec * 0.006) * 1.2).toFloat()
+            sec < 3300  -> 1.5f + (sin(sec * 0.005) * 1.5).toFloat()
+            sec < 4200  -> -0.5f + (sin(sec * 0.01) * 1.5).toFloat()
+            sec < 4700  -> 1.5f + (sin(sec * 0.006) * 2.0).toFloat()
+            sec < 5200  -> 2.0f + (sin(sec * 0.005) * 1.5).toFloat()
+            // Climb 1: 4-7%
+            sec < 5500  -> 5.5f + (sin(sec * 0.02) * 1.5).toFloat()
+            sec < 5800  -> 6.5f + (sin(sec * 0.02) * 2.0).toFloat()
+            sec < 5900  -> 1.0f
+            // Descent
+            sec < 6300  -> -3.5f + (sin(sec * 0.01) * 2.0).toFloat()
+            sec < 6700  -> -5.5f + (sin(sec * 0.008) * 2.0).toFloat()
+            // Climb 2: 6-11% sustained
+            sec < 6900  -> 3.5f + (sin(sec * 0.02) * 1.5).toFloat()
+            sec < 7100  -> 5.5f + (sin(sec * 0.015) * 2.0).toFloat()
+            sec < 7300  -> 7.5f + (sin(sec * 0.02) * 2.0).toFloat()
+            sec < 7500  -> 9.0f + (sin(sec * 0.02) * 1.5).toFloat()
+            sec < 7700  -> 10.0f + (sin(sec * 0.025) * 1.5).toFloat()
+            sec < 7900  -> 8.5f + (sin(sec * 0.02) * 2.0).toFloat()
+            sec < 8000  -> 3.0f
+            // Final descent
+            else        -> -2.5f + (sin(sec * 0.01) * 2.0).toFloat()
+        }
+
+        val totalSec = 8379L
+        val frames = mutableListOf<RideContext>()
+
+        for (sec in 0..totalSec) {
+            val hr = hrAtSec(sec)
+            val grade = gradeAtSec(sec)
+            val hrZone = ZoneCalculator.hrZone(hr, rideMaxHr)
+            val isOnClimb = grade > 3.5f
+            val isDescending = grade < -3.0f
+
+            // Estimate power from HR% (no power meter — rough approximation)
+            val hrPct = hr.toFloat() / rideMaxHr
+            val estPower = (hrPct * hrPct * rideFtp * 1.1f).toInt().coerceIn(60, 300)
+            val powerZone = ZoneCalculator.powerZone(estPower, rideFtp)
+
+            // HR decoupling starts building after 90min
+            val decoupling = when {
+                sec < 5400 -> 0f
+                sec < 7200 -> (sec - 5400f) / 1800f * 7f  // 0→7% on climb 2
+                else -> 7f
+            }
+
+            // Carb deficit accumulates — no NomRide, no logging
+            // At ~65g/hr avg rate, after 141min = ~153g target, ~0 consumed
+            val elapsedHours = sec / 3600f
+            val carbTarget = (elapsedHours * 65).toInt()
+            val carbConsumed = 0 // no logging during this ride
+            val carbDeficit = (carbTarget - carbConsumed).coerceAtLeast(0)
+
+            // Mode: CLIMB_FOCUSED given 675m gain, multiple steep segments
+            val mode = when {
+                sec < 600 -> RideMode.ADAPTIVE
+                else -> RideMode.CLIMB_FOCUSED
+            }
+
+            frames.add(
+                RideContext(
+                    activeMode = ActiveMode(mode, ModeSource.AUTO_DETECTED),
+                    isRecording = true,
+                    rideElapsedSec = sec,
+                    ftp = rideFtp,
+                    maxHr = rideMaxHr,
+                    weightKg = rideWeight,
+                    powerWatts = estPower,
+                    power5sAvg = estPower,
+                    power30sAvg = estPower,
+                    power3minAvg = estPower - 5,
+                    normalizedPower = (estPower * 1.04f).toInt(),
+                    variabilityIndex = if (isOnClimb) 1.06f else 1.04f,
+                    powerZone = powerZone,
+                    heartRateBpm = hr,
+                    hrZone = hrZone,
+                    hrDecouplingPct = decoupling,
+                    hrRecoveryRate = if (isDescending) 0.8f else 0.2f,
+                    cadenceRpm = when {
+                        isOnClimb && grade > 8f -> 68 + (Math.sin(sec * 0.02) * 4).toInt()
+                        isOnClimb -> 75 + (Math.sin(sec * 0.02) * 5).toInt()
+                        isDescending -> 85 + (Math.sin(sec * 0.015) * 8).toInt()
+                        else -> 83 + (Math.sin(sec * 0.01) * 6).toInt()
+                    },
+                    speedKmh = when {
+                        isOnClimb && grade > 8f -> 9f + (Math.sin(sec * 0.02) * 2).toFloat()
+                        isOnClimb -> 13f + (Math.sin(sec * 0.02) * 3).toFloat()
+                        isDescending -> 35f + (Math.sin(sec * 0.01) * 8).toFloat()
+                        else -> 22f + (Math.sin(sec * 0.008) * 5).toFloat()
+                    },
+                    distanceKm = sec * 40.7f / totalSec,
+                    elevationGradePct = grade,
+                    isOnClimb = isOnClimb,
+                    isDescending = isDescending,
+                    hasRoute = true,
+                    routeTotalElevationGainM = 675f,
+                    routeSteeplyGradedPct = 35f,  // >30% of route above 4%
+                    totalClimbsOnRoute = 2,
+                    climbNumber = when {
+                        sec < 5200 -> 0
+                        sec < 6300 -> 1
+                        else -> 2
+                    },
+                    distanceToClimbTopM = when {
+                        // Approaching climb 1 at t=87min — warn at ~t=82min
+                        sec in 4800..5200 -> ((5200 - sec) * 15f)  // ~6km to top, shrinks
+                        // Approaching climb 2 at t=111min — warn at ~t=106min
+                        sec in 6300..6700 -> ((6700 - sec) * 12f)
+                        else -> null
+                    },
+                    carbsConsumedGrams = carbConsumed,
+                    carbTargetGrams = carbTarget,
+                    carbDeficitGrams = carbDeficit,
+                )
+            )
+        }
+
+        runSimulation(
+            "REAL RIDE — March 15, 40km/675m, HR-only, no fueling logged",
+            frames,
+            tickIntervalSec = 10,
+        )
     }
 }
