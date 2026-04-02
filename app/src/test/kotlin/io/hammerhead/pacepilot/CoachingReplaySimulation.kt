@@ -6,6 +6,8 @@ import io.hammerhead.pacepilot.util.ZoneCalculator
 import org.junit.Test
 import kotlin.math.sin
 
+private const val DEFAULT_CARBS_PER_SERVING = 25
+
 /**
  * Simulates a full ride through the coaching engine with CooldownManager,
  * printing every alert that would fire on the Karoo with timestamps.
@@ -42,21 +44,39 @@ class CoachingReplaySimulation {
         frames: List<RideContext>,
         tickIntervalSec: Int = 10,
         cooldownMultiplier: Float = 1f,
+        autoAckFuel: Boolean = true, // NEW: simulate auto-acknowledge
     ) {
         val clockOffset = 100_000L // offset so per-rule suppression doesn't false-positive at t=0
         var simTimeSec = clockOffset
         val cooldown = CooldownManager(cooldownMultiplier) { simTimeSec }
         val alerts = mutableListOf<Triple<Long, CoachingEvent, String>>()
 
+        // Track carb state when auto-ack is enabled
+        var carbsConsumed = 0
+        var lastFuelAckSec = 0L
+        var lastDrinkAckSec = 0L
+
         println("\n${"=".repeat(72)}")
         println("  RIDE SIMULATION: $name")
         println("  FTP=$ftp  MaxHR=$maxHr  Tick=${tickIntervalSec}s  Cooldown=${cooldownMultiplier}x")
+        println("  Auto-acknowledge fuel: $autoAckFuel")
         println("${"=".repeat(72)}\n")
 
-        for ((i, ctx) in frames.withIndex()) {
+        for ((i, frame) in frames.withIndex()) {
             if (i % tickIntervalSec != 0) continue
 
-            simTimeSec = clockOffset + ctx.rideElapsedSec
+            simTimeSec = clockOffset + frame.rideElapsedSec
+
+            // Apply auto-ack carb state to context if enabled
+            val ctx = if (autoAckFuel && carbsConsumed > 0) {
+                val newDeficit = (frame.carbTargetGrams - carbsConsumed).coerceAtLeast(0)
+                frame.copy(
+                    carbsConsumedGrams = carbsConsumed,
+                    carbDeficitGrams = newDeficit,
+                    lastFuelAckEpochSec = lastFuelAckSec,
+                    lastDrinkAckEpochSec = lastDrinkAckSec,
+                )
+            } else frame
 
             val candidates = gatherCandidates(ctx)
             if (candidates.isEmpty()) continue
@@ -68,8 +88,29 @@ class CoachingReplaySimulation {
 
             cooldown.recordFired(toFire.ruleId, toFire.priority)
 
+            // Auto-acknowledge fueling — credit carbs when alert fires
+            if (autoAckFuel && toFire.alertStyle == AlertStyle.FUEL) {
+                when (toFire.ruleId) {
+                    RuleId.FUEL_TIME_BASED,
+                    RuleId.RECOVERY_FUELING_WINDOW,
+                    RuleId.PRE_INTERVAL_FUELING -> {
+                        carbsConsumed += DEFAULT_CARBS_PER_SERVING
+                        lastFuelAckSec = clockOffset + ctx.rideElapsedSec
+                    }
+                    RuleId.DRINK_REMINDER -> {
+                        lastDrinkAckSec = clockOffset + ctx.rideElapsedSec
+                    }
+                    RuleId.CLIMB_DESCENT -> {
+                        carbsConsumed += DEFAULT_CARBS_PER_SERVING
+                        lastFuelAckSec = clockOffset + ctx.rideElapsedSec
+                        lastDrinkAckSec = clockOffset + ctx.rideElapsedSec
+                    }
+                }
+            }
+
             val zone = if (ctx.ftp > 0) ZoneCalculator.powerZone(ctx.power30sAvg, ctx.ftp) else 0
-            val status = "P=${ctx.power30sAvg}w Z$zone HR=${ctx.heartRateBpm} Cad=${ctx.cadenceRpm}"
+            val carbInfo = if (autoAckFuel) " Carbs=${carbsConsumed}g" else ""
+            val status = "P=${ctx.power30sAvg}w Z$zone HR=${ctx.heartRateBpm}$carbInfo"
             alerts.add(Triple(ctx.rideElapsedSec, toFire, status))
 
             val icon = when (toFire.alertStyle) {
@@ -95,6 +136,9 @@ class CoachingReplaySimulation {
         println("  Total alerts: ${alerts.size}")
         val byStyle = alerts.groupBy { it.second.alertStyle }
         byStyle.forEach { (style, list) -> println("    $style: ${list.size}") }
+        if (autoAckFuel) {
+            println("  Total carbs consumed (auto-ack): ${carbsConsumed}g")
+        }
         println("─".repeat(72))
     }
 
@@ -781,6 +825,210 @@ class CoachingReplaySimulation {
             "REAL RIDE — March 15, 40km/675m, HR-only, no fueling logged",
             frames,
             tickIntervalSec = 10,
+        )
+    }
+
+    // ─── Scenario 9: Real ride — March 21 2026, 69km, 633m elevation ────────
+    //
+    // Source: Karoo-Afternoon_Ride-2026-03-21-1702.fit
+    // No power meter — HR-only. FTP=250, MaxHR=179, Weight ~75kg.
+    // Duration: 2h33m (9200s), Distance: 69km, Elevation: 633m
+    // Multiple climbs with grades 5-7%, some steep pitches at 6-7.7%
+    // Max HR: 177bpm around t=29min (first major climb)
+    // Mode: CLIMB_FOCUSED based on elevation profile
+    //
+    // Data format: [sec, hr, grade*10, speed*10, alt, dist*10]
+    @Test
+    fun `real ride march 21 - 69km 633m climb focused hr only`() {
+        val rideFtp = 250
+        val rideMaxHr = 179
+        val rideWeight = 75f
+        val totalSec = 8970L
+
+        // Raw data from FIT file, sampled every 10s
+        val rawData = listOf(
+            intArrayOf(0, 86, 0, 0, 290, 0),
+            intArrayOf(10, 95, 0, 0, 290, 0),
+            intArrayOf(100, 95, 0, 251, 288, 3),
+            intArrayOf(200, 102, 0, 292, 288, 9),
+            intArrayOf(300, 107, -5, 159, 288, 16),
+            intArrayOf(400, 121, 0, 300, 287, 24),
+            intArrayOf(500, 148, 3, 311, 288, 33),
+            intArrayOf(600, 157, 12, 281, 291, 41),
+            intArrayOf(700, 169, 31, 261, 303, 48),
+            intArrayOf(800, 173, 56, 144, 324, 54),
+            intArrayOf(900, 169, 19, 225, 341, 59),
+            intArrayOf(1000, 166, 20, 201, 356, 64),
+            intArrayOf(1100, 171, 27, 170, 376, 69),
+            intArrayOf(1200, 165, 53, 212, 389, 75),
+            intArrayOf(1300, 163, 16, 238, 402, 82),
+            intArrayOf(1400, 165, -51, 464, 387, 92),
+            intArrayOf(1500, 167, 17, 314, 371, 102),
+            intArrayOf(1600, 176, 30, 175, 388, 108),
+            intArrayOf(1700, 176, 59, 142, 412, 112),
+            intArrayOf(1800, 172, -1, 333, 426, 118),
+            intArrayOf(1900, 150, -66, 505, 388, 128),
+            intArrayOf(2000, 147, 7, 307, 348, 141),
+            intArrayOf(2100, 157, -26, 368, 357, 148),
+            intArrayOf(2200, 159, 15, 294, 358, 157),
+            intArrayOf(2300, 165, 36, 216, 375, 163),
+            intArrayOf(2400, 156, 29, 209, 387, 170),
+            intArrayOf(2500, 163, 33, 174, 406, 174),
+            intArrayOf(2600, 169, 64, 135, 430, 178),
+            intArrayOf(2700, 168, 59, 127, 451, 182),
+            intArrayOf(2800, 170, 50, 133, 471, 186),
+            intArrayOf(2900, 171, -6, 194, 491, 190),
+            intArrayOf(3000, 163, 6, 420, 447, 202),
+            intArrayOf(3100, 160, 6, 370, 418, 216),
+            intArrayOf(3200, 158, -25, 374, 417, 224),
+            intArrayOf(3300, 164, -13, 375, 409, 234),
+            intArrayOf(3400, 169, -13, 298, 411, 243),
+            intArrayOf(3500, 159, -35, 392, 404, 253),
+            intArrayOf(3600, 163, 13, 288, 398, 263),
+            intArrayOf(3700, 159, -12, 350, 397, 272),
+            intArrayOf(3800, 155, -3, 338, 383, 281),
+            intArrayOf(3900, 161, 33, 209, 401, 288),
+            intArrayOf(4000, 160, 56, 172, 422, 294),
+            intArrayOf(4100, 158, 28, 194, 439, 298),
+            intArrayOf(4200, 163, 15, 225, 457, 304),
+            intArrayOf(4300, 162, 39, 192, 474, 309),
+            intArrayOf(4400, 152, 23, 224, 484, 316),
+            intArrayOf(4500, 157, 18, 188, 498, 323),
+            intArrayOf(4600, 141, 5, 370, 493, 331),
+            intArrayOf(4700, 153, -22, 324, 504, 338),
+            intArrayOf(4800, 142, -45, 435, 461, 350),
+            intArrayOf(4900, 147, -18, 383, 427, 362),
+            intArrayOf(5000, 155, -41, 390, 420, 371),
+            intArrayOf(5100, 154, 7, 329, 420, 379),
+            intArrayOf(5200, 150, -35, 448, 409, 388),
+            intArrayOf(5300, 151, 0, 279, 405, 398),
+            intArrayOf(5400, 147, 5, 275, 411, 406),
+            intArrayOf(5500, 149, 5, 281, 419, 414),
+            intArrayOf(5600, 145, -11, 246, 425, 421),
+            intArrayOf(5700, 142, 10, 331, 431, 429),
+            intArrayOf(5800, 150, 26, 214, 442, 437),
+            intArrayOf(5900, 147, 37, 211, 452, 444),
+            intArrayOf(6000, 146, 14, 237, 462, 451),
+            intArrayOf(6100, 152, 7, 350, 458, 460),
+            intArrayOf(6200, 154, 4, 227, 467, 467),
+            intArrayOf(6300, 145, 56, 227, 470, 474),
+            intArrayOf(6400, 141, -14, 374, 472, 482),
+            intArrayOf(6500, 133, -33, 390, 456, 492),
+            intArrayOf(6600, 144, -2, 372, 431, 503),
+            intArrayOf(6700, 143, -8, 351, 416, 513),
+            intArrayOf(6800, 131, 13, 100, 409, 521),
+            intArrayOf(6900, 130, -27, 320, 415, 527),
+            intArrayOf(7000, 139, -16, 322, 410, 535),
+            intArrayOf(7100, 143, 30, 192, 407, 545),
+            intArrayOf(7200, 151, 15, 162, 407, 551),
+            intArrayOf(7300, 146, 4, 300, 408, 558),
+            intArrayOf(7400, 137, -14, 338, 403, 566),
+            intArrayOf(7500, 130, -47, 338, 389, 575),
+            intArrayOf(7600, 127, -16, 355, 346, 585),
+            intArrayOf(7700, 141, -2, 348, 339, 595),
+            intArrayOf(7800, 146, 5, 270, 338, 604),
+            intArrayOf(7900, 125, 4, 292, 331, 611),
+            intArrayOf(8000, 131, -14, 296, 327, 619),
+            intArrayOf(8100, 138, -10, 279, 321, 627),
+            intArrayOf(8200, 129, 17, 220, 321, 634),
+            intArrayOf(8300, 133, 6, 268, 321, 642),
+            intArrayOf(8400, 127, -3, 292, 321, 649),
+            intArrayOf(8500, 115, 6, 288, 316, 657),
+            intArrayOf(8600, 116, -12, 285, 320, 663),
+            intArrayOf(8700, 109, -5, 281, 307, 672),
+            intArrayOf(8800, 135, 0, 300, 305, 680),
+            intArrayOf(8900, 137, 0, 283, 303, 687),
+            intArrayOf(8970, 125, 2, 253, 304, 692),
+        )
+
+        val frames = mutableListOf<RideContext>()
+
+        for ((idx, row) in rawData.withIndex()) {
+            val sec = row[0].toLong()
+            val hr = row[1]
+            val grade = row[2] / 10f
+            val speedKmh = row[3] / 10f
+            val alt = row[4].toFloat()
+            val distKm = row[5] / 10f
+
+            val hrZone = ZoneCalculator.hrZone(hr, rideMaxHr)
+            val isOnClimb = grade > 3.5f
+            val isDescending = grade < -3.0f
+
+            // Estimate power from HR% (no power meter)
+            val hrPct = hr.toFloat() / rideMaxHr
+            val estPower = (hrPct * hrPct * rideFtp * 1.1f).toInt().coerceIn(60, 300)
+            val powerZone = ZoneCalculator.powerZone(estPower, rideFtp)
+
+            // HR decoupling builds after 90min
+            val decoupling = when {
+                sec < 5400 -> 0f
+                sec < 7200 -> (sec - 5400f) / 1800f * 6f
+                else -> 6f
+            }
+
+            // Carb deficit — no logging
+            val elapsedHours = sec / 3600f
+            val carbTarget = (elapsedHours * 65).toInt()
+            val carbConsumed = 0
+            val carbDeficit = (carbTarget - carbConsumed).coerceAtLeast(0)
+
+            // Mode: CLIMB_FOCUSED given 633m gain
+            val mode = if (sec < 600) RideMode.ADAPTIVE else RideMode.CLIMB_FOCUSED
+
+            frames.add(
+                RideContext(
+                    activeMode = ActiveMode(mode, ModeSource.AUTO_DETECTED),
+                    isRecording = true,
+                    rideElapsedSec = sec,
+                    ftp = rideFtp,
+                    maxHr = rideMaxHr,
+                    weightKg = rideWeight,
+                    powerWatts = estPower,
+                    power5sAvg = estPower,
+                    power30sAvg = estPower,
+                    power3minAvg = estPower - 5,
+                    normalizedPower = (estPower * 1.04f).toInt(),
+                    variabilityIndex = if (isOnClimb) 1.06f else 1.04f,
+                    powerZone = powerZone,
+                    heartRateBpm = hr,
+                    hrZone = hrZone,
+                    hrDecouplingPct = decoupling,
+                    hrRecoveryRate = if (isDescending) 0.8f else 0.2f,
+                    cadenceRpm = when {
+                        isOnClimb && grade > 5f -> 70 + (Math.sin(sec * 0.02) * 4).toInt()
+                        isOnClimb -> 76 + (Math.sin(sec * 0.02) * 5).toInt()
+                        isDescending -> 88 + (Math.sin(sec * 0.015) * 8).toInt()
+                        else -> 84 + (Math.sin(sec * 0.01) * 6).toInt()
+                    },
+                    speedKmh = speedKmh,
+                    distanceKm = distKm,
+                    elevationGradePct = grade,
+                    isOnClimb = isOnClimb,
+                    isDescending = isDescending,
+                    hasRoute = true,
+                    routeTotalElevationGainM = 633f,
+                    routeSteeplyGradedPct = 32f,
+                    totalClimbsOnRoute = 4,
+                    climbNumber = when {
+                        sec < 700 -> 0
+                        sec < 1900 -> 1
+                        sec < 3000 -> 2
+                        sec < 4700 -> 3
+                        else -> 4
+                    },
+                    distanceToClimbTopM = null,
+                    carbsConsumedGrams = carbConsumed,
+                    carbTargetGrams = carbTarget,
+                    carbDeficitGrams = carbDeficit,
+                )
+            )
+        }
+
+        runSimulation(
+            "REAL RIDE — March 21, 69km/633m, HR-only, no fueling logged",
+            frames,
+            tickIntervalSec = 1,  // 1 tick = 1 raw data point (10s intervals)
         )
     }
 }

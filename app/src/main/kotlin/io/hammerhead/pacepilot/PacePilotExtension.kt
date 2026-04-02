@@ -18,8 +18,10 @@ import io.hammerhead.pacepilot.history.PostRideInsightsRepository
 import io.hammerhead.pacepilot.history.PostRideIntelligence
 import io.hammerhead.pacepilot.history.RideSummaryBuilder
 import io.hammerhead.pacepilot.model.ActiveMode
+import io.hammerhead.pacepilot.model.AlertStyle
 import io.hammerhead.pacepilot.model.ModeSource
 import io.hammerhead.pacepilot.model.RideMode
+import io.hammerhead.pacepilot.model.RuleId
 import io.hammerhead.pacepilot.model.currentMode
 import io.hammerhead.pacepilot.settings.SettingsRepository
 import io.hammerhead.pacepilot.state.ActiveRideSnapshot
@@ -143,6 +145,30 @@ class PacePilotExtension : KarooExtension("pacepilot", "1.0") {
             onEventDispatched = { event, message, aiUpgraded ->
                 val mode = telemetryAggregator.rideContext.value.currentMode
                 fitExporter.onCoachingEvent(event, message, mode, aiUpgraded)
+
+                // Auto-acknowledge fueling — assume rider follows prompts
+                if (event.alertStyle == AlertStyle.FUEL) {
+                    when (event.ruleId) {
+                        RuleId.FUEL_TIME_BASED,
+                        RuleId.RECOVERY_FUELING_WINDOW,
+                        RuleId.PRE_INTERVAL_FUELING -> {
+                            val grams = settingsRepo.current.carbsPerFuelServing
+                            telemetryAggregator.acknowledgedEat(grams)
+                            Timber.d("PacePilot: Auto-ack eat (${grams}g) on ${event.ruleId}")
+                        }
+                        RuleId.DRINK_REMINDER -> {
+                            telemetryAggregator.acknowledgedDrink()
+                            Timber.d("PacePilot: Auto-ack drink on ${event.ruleId}")
+                        }
+                        RuleId.CLIMB_DESCENT -> {
+                            // Descent = recovery window — credit both eat + drink
+                            val grams = settingsRepo.current.carbsPerFuelServing
+                            telemetryAggregator.acknowledgedEat(grams)
+                            telemetryAggregator.acknowledgedDrink()
+                            Timber.d("PacePilot: Auto-ack eat+drink on descent")
+                        }
+                    }
+                }
             },
         )
 
