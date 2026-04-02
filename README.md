@@ -78,17 +78,55 @@ cp gradle.properties.example gradle.properties
 
 ### Install on Karoo
 
+There are three ways to install. Option A is the easiest.
+
+#### Option A — Hammerhead Companion app (easiest, no computer needed)
+
+1. Download the APK to your phone from the [releases page](https://github.com/alainchristopher/pacepilot/releases)
+2. Open the **Hammerhead Companion app** on your phone
+3. Go to **Extensions → Manage → Upload APK** (or use the share sheet to share the APK file to the Companion app)
+4. On iPhone you can also **AirDrop** the APK to your phone first, then share it to the Companion app from Files
+
+The Companion app will push the APK to your Karoo over Bluetooth automatically.
+
+#### Option B — ADB via USB
+
+Enable developer mode on Karoo first: **Settings → About → tap Build number 7× → Developer options → USB debugging ON**
+
 ```bash
-# Connect via USB or wireless ADB
+# Mac: install ADB
+brew install android-platform-tools
+
+# Plug in via USB, allow debugging when Karoo prompts, then:
+adb install -r PacePilot-v1.1.0.apk
+```
+
+Windows: download [platform-tools](https://developer.android.com/tools/releases/platform-tools), unzip, run `adb install -r` from that folder.
+
+#### Option C — ADB via Wi-Fi
+
+```bash
+# Enable Wireless Debugging on Karoo (Developer options), note the IP shown
 adb connect <karoo-ip>:5555
+adb install -r PacePilot-v1.1.0.apk
+```
 
-# Install
-adb install -r app/build/outputs/apk/debug/app-debug.apk
+#### Set API key via deep link (optional, ADB only)
 
-# Set API key via deep link (optional)
+```bash
 adb shell am start -a android.intent.action.VIEW -d "pacepilot://config?gemini_key=YOUR_KEY"
 # Or for Mercury-2: pacepilot://config?mercury_key=YOUR_KEY&provider=mercury
 ```
+
+### Hotspot tip
+
+Karoo disconnects from Wi-Fi when a ride starts. To keep internet connected for AI coaching:
+
+1. **Start your ride on Karoo first**
+2. Then enable hotspot on your phone
+3. Karoo reconnects automatically within ~30 seconds
+
+Enabling hotspot before starting the ride will not work — Karoo drops Wi-Fi on recording start.
 
 ### Uninstall
 
