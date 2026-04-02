@@ -9,6 +9,7 @@ import io.hammerhead.pacepilot.ai.GeminiClient
 import io.hammerhead.pacepilot.ai.LlmProvider
 import io.hammerhead.pacepilot.ai.MercuryClient
 import io.hammerhead.pacepilot.ai.RideNarrative
+import io.hammerhead.pacepilot.analytics.AnalyticsManager
 import io.hammerhead.pacepilot.history.RideHistory
 import io.hammerhead.pacepilot.model.AlertStyle
 import io.hammerhead.pacepilot.model.CoachingEvent
@@ -226,24 +227,34 @@ class CoachingEngine(
         if (client != null) {
             // Show static message immediately — rider gets feedback in <1ms
             dispatch(toFire, toFire.message, aiUpgraded = false)
+            AnalyticsManager.trackAlertShown(toFire.ruleId, aiUpgraded = false, latencyMs = 0)
 
             // Upgrade async — when AI responds before auto-dismiss, rider sees smarter message
             val event = toFire
+            val aiStartMs = System.currentTimeMillis()
             scope.launch {
                 val livePrompt = CoachingContextBuilder.buildLivePrompt(event, ctx, narrative)
                 val aiMessage = client.generate(livePrompt, event.message)
+                val latencyMs = System.currentTimeMillis() - aiStartMs
                 if (aiMessage != event.message) {
-                    Timber.d("CoachingEngine: AI upgraded \"${event.message}\" → \"$aiMessage\"")
+                    Timber.d("CoachingEngine: AI upgraded \"${event.message}\" → \"$aiMessage\" (${latencyMs}ms)")
                     _aiUpgrades++
                     dispatch(event, aiMessage, aiUpgraded = true)
+                    AnalyticsManager.trackAlertShown(event.ruleId, aiUpgraded = true, latencyMs = latencyMs)
                 } else {
                     // AI returned fallback (network issue or same message)
                     _aiFailures++
-                    Timber.d("CoachingEngine: AI fallback for ${event.ruleId}")
+                    Timber.d("CoachingEngine: AI fallback for ${event.ruleId} (${latencyMs}ms)")
+                    AnalyticsManager.trackAiCallFailed(
+                        provider = settingsRepo.current.llmProvider,
+                        errorType = "fallback_returned",
+                        latencyMs = latencyMs,
+                    )
                 }
             }
         } else {
             dispatch(toFire, toFire.message, aiUpgraded = false)
+            AnalyticsManager.trackAlertShown(toFire.ruleId, aiUpgraded = false, latencyMs = 0)
         }
     }
 

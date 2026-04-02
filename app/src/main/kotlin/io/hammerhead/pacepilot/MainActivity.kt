@@ -29,6 +29,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.hammerhead.pacepilot.ai.LlmProvider
+import io.hammerhead.pacepilot.analytics.AnalyticsManager
 import io.hammerhead.pacepilot.history.PostRideInsight
 import io.hammerhead.pacepilot.history.PostRideInsightsRepository
 import io.hammerhead.pacepilot.model.RideMode
@@ -58,6 +59,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         settingsRepo = SettingsRepository(this)
         postRideInsightsRepo = PostRideInsightsRepository(this)
+        AnalyticsManager.init(application, settingsRepo)
         handleDeepLink()
 
         setContent {
@@ -352,6 +354,20 @@ fun PacePilotSettingsScreen(
             )
         }
 
+        // --- Analytics Card ---
+        SettingsCard(title = "ANALYTICS", alpha = sectionAlpha) {
+            ToggleRow("Help improve PacePilot", settings.analyticsEnabled) {
+                settings = settings.copy(analyticsEnabled = it)
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                "Anonymous usage data (ride duration, AI success rate, alert counts). No GPS, no personal data.",
+                color = TextTertiary,
+                fontSize = 11.sp,
+                lineHeight = 14.sp,
+            )
+        }
+
         Spacer(modifier = Modifier.height(4.dp))
 
         // Save button
@@ -359,6 +375,7 @@ fun PacePilotSettingsScreen(
             onClick = {
                 try {
                     onSave(settings)
+                    AnalyticsManager.updateOptOut()
                     val status = if (settings.appEnabled) "ON" else "OFF"
                     Toast.makeText(context, "Saved — PacePilot $status", Toast.LENGTH_SHORT).show()
                 } catch (e: Exception) {
@@ -376,7 +393,7 @@ fun PacePilotSettingsScreen(
 
         // Version tag
         Text(
-            text = "v1.0 · PacePilot",
+            text = "v1.2 · PacePilot",
             color = TextTertiary,
             fontSize = 10.sp,
             textAlign = TextAlign.Center,

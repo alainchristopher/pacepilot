@@ -59,4 +59,10 @@ data class UserSettings(
     val geminiApiKey: String = "",
     /** Mercury-2 API key — get 10M free tokens at platform.inceptionlabs.ai */
     val mercuryApiKey: String = "",
+
+    // ----------------------------------------------------------------
+    // Analytics
+    // ----------------------------------------------------------------
+    /** Opt-in consent for anonymous product analytics (PostHog) */
+    val analyticsEnabled: Boolean = false,
 )

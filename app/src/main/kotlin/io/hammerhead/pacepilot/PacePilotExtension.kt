@@ -7,6 +7,7 @@ import io.hammerhead.karooext.internal.Emitter
 import io.hammerhead.karooext.models.FitEffect
 import io.hammerhead.karooext.models.InRideAlert
 import io.hammerhead.karooext.models.RideState
+import io.hammerhead.pacepilot.analytics.AnalyticsManager
 import io.hammerhead.pacepilot.coaching.CoachingEngine
 import io.hammerhead.pacepilot.detection.ModeDetector
 import io.hammerhead.pacepilot.detection.ModeTransitionEngine
@@ -109,6 +110,7 @@ class PacePilotExtension : KarooExtension("pacepilot", "1.0") {
         historyRepo = RideHistoryRepository(this)
         postRideInsightsRepo = PostRideInsightsRepository(this)
         activeRideStateStore = ActiveRideStateStore(this)
+        AnalyticsManager.init(application, settingsRepo)
         serviceScope.launch { historyRepo.load() }
 
         // Wire components
@@ -219,6 +221,9 @@ class PacePilotExtension : KarooExtension("pacepilot", "1.0") {
             telemetryAggregator.updateMode(initialMode)
             Timber.i("PacePilot: initial mode = ${initialMode.mode} (${initialMode.source})")
 
+            // Track ride start
+            AnalyticsManager.trackRideStarted(initialMode.mode, settingsRepo.current.llmProvider)
+
             // Announce mode to rider
             dispatchModeNotification(initialMode.mode)
 
@@ -273,6 +278,17 @@ class PacePilotExtension : KarooExtension("pacepilot", "1.0") {
 
         // Save ride summary before stopping telemetry
         val ctx = telemetryAggregator.rideContext.value
+
+        // Track ride completion
+        AnalyticsManager.trackRideCompleted(
+            durationMin = (ctx.rideElapsedSec / 60).toInt(),
+            distanceKm = ctx.distanceKm,
+            elevationM = ctx.elevationGainM,
+            mode = ctx.currentMode,
+            stats = coachingStats,
+            aiProvider = settingsRepo.current.llmProvider,
+        )
+
         if (ctx.rideElapsedSec > 300) {
             serviceScope.launch {
                 withContext(NonCancellable) {
@@ -349,10 +365,16 @@ class PacePilotExtension : KarooExtension("pacepilot", "1.0") {
     // ------------------------------------------------------------------
 
     private fun handleModeChange(newMode: ActiveMode) {
+        val oldMode = telemetryAggregator.rideContext.value.currentMode
         Timber.i("PacePilot: mode changed to ${newMode.mode} (${newMode.source})")
         telemetryAggregator.updateMode(newMode)
         if (newMode.source == ModeSource.TRANSITION) {
             dispatchModeNotification(newMode.mode)
+            AnalyticsManager.trackModeTransition(
+                fromMode = oldMode,
+                toMode = newMode.mode,
+                trigger = "auto",
+            )
         }
     }
 
@@ -392,6 +414,7 @@ class PacePilotExtension : KarooExtension("pacepilot", "1.0") {
             "ack_fuel", "ack_eat" -> {
                 val grams = settingsRepo.current.carbsPerFuelServing
                 telemetryAggregator.acknowledgedEat(grams)
+                AnalyticsManager.trackAlertInteracted("fuel_reminder", "ack_fuel")
                 karooSystem.dispatch(
                     InRideAlert(
                         id = "pp_eat_ack",
@@ -406,6 +429,7 @@ class PacePilotExtension : KarooExtension("pacepilot", "1.0") {
             }
             "ack_drink" -> {
                 telemetryAggregator.acknowledgedDrink()
+                AnalyticsManager.trackAlertInteracted("drink_reminder", "ack_drink")
                 karooSystem.dispatch(
                     InRideAlert(
                         id = "pp_drink_ack",
@@ -421,6 +445,7 @@ class PacePilotExtension : KarooExtension("pacepilot", "1.0") {
             "snooze_15min" -> {
                 val untilSec = System.currentTimeMillis() / 1000 + 900
                 telemetryAggregator.updateSilence(untilSec)
+                AnalyticsManager.trackAlertInteracted("global", "snooze_15min")
                 karooSystem.dispatch(
                     InRideAlert(
                         id = "pp_snoozed_15",

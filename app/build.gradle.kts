@@ -13,8 +13,8 @@ android {
         applicationId = "io.hammerhead.pacepilot"
         minSdk = 23
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 3
+        versionName = "1.2.0"
     }
 
     buildTypes {
@@ -71,6 +71,7 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.glance.appwidget)
     implementation(libs.okhttp)
+    implementation(libs.posthog)
     debugImplementation(libs.androidx.compose.ui.tooling)
 
     testImplementation(libs.junit)
