@@ -36,6 +36,18 @@ object PostRideIntelligence {
             if (latestRide.avgHrRecoveryRateBpmPerSec > 0f) {
                 add("Recovery rate ${"%.2f".format(latestRide.avgHrRecoveryRateBpmPerSec)} bpm/s.")
             }
+            // AI coaching stats
+            if (latestRide.alertsFired > 0) {
+                val aiRate = if (latestRide.alertsFired > 0) {
+                    (latestRide.aiUpgrades * 100 / latestRide.alertsFired)
+                } else 0
+                add("Coaching: ${latestRide.alertsFired} alerts, $aiRate% AI-upgraded.")
+                if (latestRide.aiFailures > 0 && latestRide.aiUpgrades == 0) {
+                    add("No AI connection — all alerts were rule-based.")
+                } else if (latestRide.aiFailures > latestRide.aiUpgrades) {
+                    add("Intermittent AI connectivity — ${latestRide.aiFailures} fallbacks.")
+                }
+            }
         }
 
         val patterns = mutableListOf<String>().apply {

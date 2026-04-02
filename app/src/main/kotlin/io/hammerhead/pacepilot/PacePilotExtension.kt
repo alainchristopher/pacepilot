@@ -138,9 +138,9 @@ class PacePilotExtension : KarooExtension("pacepilot", "1.0") {
             settingsRepo = settingsRepo,
             historyProvider = { historyRepo.current },
             scope = serviceScope,
-            onEventDispatched = { event, message ->
+            onEventDispatched = { event, message, aiUpgraded ->
                 val mode = telemetryAggregator.rideContext.value.currentMode
-                fitExporter.onCoachingEvent(event, message, mode)
+                fitExporter.onCoachingEvent(event, message, mode, aiUpgraded)
             },
         )
 
@@ -265,8 +265,11 @@ class PacePilotExtension : KarooExtension("pacepilot", "1.0") {
         zoneTrackingJob = null
         stateSnapshotJob?.cancel()
         stateSnapshotJob = null
+
+        // Capture stats before stopping engine (stop() logs them too)
+        val coachingStats = coachingEngine.stats
         coachingEngine.stop()
-        fitExporter.onRideEnd()
+        fitExporter.onRideEnd(coachingStats)
 
         // Save ride summary before stopping telemetry
         val ctx = telemetryAggregator.rideContext.value
@@ -281,6 +284,7 @@ class PacePilotExtension : KarooExtension("pacepilot", "1.0") {
                     hrZoneTimeSec = hrZoneTimeSec.copyOf(),
                     peakHrBpm = peakHrBpm,
                     peakPowerWatts = peakPowerWatts,
+                    coachingStats = coachingStats,
                 )
                 historyRepo.saveRide(summary)
                 val insight = PostRideIntelligence.build(historyRepo.current, summary)

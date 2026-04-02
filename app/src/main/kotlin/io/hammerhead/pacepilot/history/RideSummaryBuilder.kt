@@ -1,5 +1,6 @@
 package io.hammerhead.pacepilot.history
 
+import io.hammerhead.pacepilot.coaching.CoachingStats
 import io.hammerhead.pacepilot.model.RideContext
 import io.hammerhead.pacepilot.telemetry.HrAnalyzer
 import io.hammerhead.pacepilot.telemetry.PowerAnalyzer
@@ -19,6 +20,7 @@ object RideSummaryBuilder {
         hrZoneTimeSec: IntArray,     // size 5
         peakHrBpm: Int,
         peakPowerWatts: Int,
+        coachingStats: CoachingStats = CoachingStats(),
     ): RideSummary {
         val totalSec = ctx.rideElapsedSec.toInt().coerceAtLeast(1)
 
@@ -47,6 +49,10 @@ object RideSummaryBuilder {
             wasStructuredWorkout = ctx.workout.isActive || ctx.workout.completedEffortCount > 0,
             avgIntervalComplianceScore = complianceScore,
             effortSetAvgPowers = effortAvgs,
+            alertsFired = coachingStats.alertsFired,
+            aiUpgrades = coachingStats.aiUpgrades,
+            aiFailures = coachingStats.aiFailures,
+            suppressedCount = coachingStats.suppressedByPolicy + coachingStats.suppressedByCooldown,
         )
     }
 }

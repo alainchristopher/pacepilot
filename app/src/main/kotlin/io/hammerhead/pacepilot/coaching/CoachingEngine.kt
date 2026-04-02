@@ -45,13 +45,24 @@ import java.util.ArrayDeque
  * RideNarrative accumulates the story of the current ride so the LLM knows
  * what happened earlier — not just the current snapshot.
  */
+/**
+ * Stats tracked during a ride for post-ride analysis.
+ */
+data class CoachingStats(
+    val alertsFired: Int = 0,
+    val aiUpgrades: Int = 0,
+    val aiFailures: Int = 0,
+    val suppressedByPolicy: Int = 0,
+    val suppressedByCooldown: Int = 0,
+)
+
 class CoachingEngine(
     private val karooSystem: KarooSystemService,
     private val rideContext: StateFlow<RideContext>,
     private val settingsRepo: SettingsRepository,
     private val historyProvider: () -> RideHistory,
     private val scope: CoroutineScope,
-    private val onEventDispatched: ((CoachingEvent, String) -> Unit)? = null,
+    private val onEventDispatched: ((CoachingEvent, String, Boolean) -> Unit)? = null,
 ) {
     private var tickJob: Job? = null
     private var narrativeJob: Job? = null
@@ -62,12 +73,30 @@ class CoachingEngine(
     val narrative = RideNarrative()
     private val alertTimesSec = ArrayDeque<Long>()
 
+    // Ride-level stats for post-ride analysis
+    @Volatile private var _alertsFired = 0
+    @Volatile private var _aiUpgrades = 0
+    @Volatile private var _aiFailures = 0
+    @Volatile private var _suppressedByPolicy = 0
+    @Volatile private var _suppressedByCooldown = 0
+
+    /** Current stats snapshot — safe to read from any thread. */
+    val stats: CoachingStats
+        get() = CoachingStats(
+            alertsFired = _alertsFired,
+            aiUpgrades = _aiUpgrades,
+            aiFailures = _aiFailures,
+            suppressedByPolicy = _suppressedByPolicy,
+            suppressedByCooldown = _suppressedByCooldown,
+        )
+
     companion object {
         const val TICK_INTERVAL_MS = 5_000L
         private const val NARRATIVE_UPDATE_MS = 1_000L
     }
 
     fun start() {
+        resetStats()
         cooldown = CooldownManager(settingsRepo.current.cooldownMultiplier)
         narrative.reset()
 
@@ -116,7 +145,16 @@ class CoachingEngine(
         narrative.reset()
         alertTimesSec.clear()
 
-        Timber.i("CoachingEngine: stopped")
+        Timber.i("CoachingEngine: stopped — stats: fired=$_alertsFired, aiUp=$_aiUpgrades, aiFail=$_aiFailures, policySupp=$_suppressedByPolicy, cdSupp=$_suppressedByCooldown")
+    }
+
+    /** Reset stats at ride start (called from start()). */
+    private fun resetStats() {
+        _alertsFired = 0
+        _aiUpgrades = 0
+        _aiFailures = 0
+        _suppressedByPolicy = 0
+        _suppressedByCooldown = 0
     }
 
     fun onSettingsChanged() {
@@ -160,32 +198,52 @@ class CoachingEngine(
 
         val cd = cooldown ?: return
         val nowSec = System.currentTimeMillis() / 1000
-        val toFire = candidates
-            .sortedByDescending { it.priority.level }
-            .firstOrNull { event ->
-                if (!settings.fuelingAlertsEnabled && event.alertStyle == AlertStyle.FUEL) return@firstOrNull false
-                cd.canFire(event, ctx) && passesAlertPolicy(event, settings, nowSec)
-            } ?: return
+
+        // Find best candidate, tracking suppression reasons
+        var toFire: CoachingEvent? = null
+        for (event in candidates.sortedByDescending { it.priority.level }) {
+            if (!settings.fuelingAlertsEnabled && event.alertStyle == AlertStyle.FUEL) continue
+
+            if (!cd.canFire(event, ctx)) {
+                _suppressedByCooldown++
+                continue
+            }
+            if (!passesAlertPolicy(event, settings, nowSec)) {
+                _suppressedByPolicy++
+                continue
+            }
+            toFire = event
+            break
+        }
+
+        if (toFire == null) return
 
         cd.recordFired(toFire.ruleId, toFire.priority)
         recordAlert(nowSec)
+        _alertsFired++
 
         val client = aiClient
         if (client != null) {
             // Show static message immediately — rider gets feedback in <1ms
-            dispatch(toFire, toFire.message)
+            dispatch(toFire, toFire.message, aiUpgraded = false)
 
             // Upgrade async — when AI responds before auto-dismiss, rider sees smarter message
+            val event = toFire
             scope.launch {
-                val livePrompt = CoachingContextBuilder.buildLivePrompt(toFire, ctx, narrative)
-                val aiMessage = client.generate(livePrompt, toFire.message)
-                if (aiMessage != toFire.message) {
-                    Timber.d("CoachingEngine: AI upgraded \"${toFire.message}\" → \"$aiMessage\"")
-                    dispatch(toFire, aiMessage)
+                val livePrompt = CoachingContextBuilder.buildLivePrompt(event, ctx, narrative)
+                val aiMessage = client.generate(livePrompt, event.message)
+                if (aiMessage != event.message) {
+                    Timber.d("CoachingEngine: AI upgraded \"${event.message}\" → \"$aiMessage\"")
+                    _aiUpgrades++
+                    dispatch(event, aiMessage, aiUpgraded = true)
+                } else {
+                    // AI returned fallback (network issue or same message)
+                    _aiFailures++
+                    Timber.d("CoachingEngine: AI fallback for ${event.ruleId}")
                 }
             }
         } else {
-            dispatch(toFire, toFire.message)
+            dispatch(toFire, toFire.message, aiUpgraded = false)
         }
     }
 
@@ -206,10 +264,10 @@ class CoachingEngine(
             RideMode.ADAPTIVE, RideMode.RECOVERY -> AdaptiveCoachingRules.evaluateAll(ctx)
         }
 
-    private fun dispatch(event: CoachingEvent, message: String) {
+    private fun dispatch(event: CoachingEvent, message: String, aiUpgraded: Boolean) {
         // Karoo screen truncates around 30 chars on the narrow display
         val detail = if (message.length > 30) message.take(28) + "…" else message
-        Timber.i("CoachingEngine: rule=${event.ruleId} priority=${event.priority} → \"$detail\"")
+        Timber.i("CoachingEngine: rule=${event.ruleId} priority=${event.priority} ai=$aiUpgraded → \"$detail\"")
         val (bgColor, textColor, title) = alertAppearance(event.alertStyle)
         karooSystem.dispatch(
             InRideAlert(
@@ -222,7 +280,7 @@ class CoachingEngine(
                 textColor = textColor,
             )
         )
-        onEventDispatched?.invoke(event, detail)
+        onEventDispatched?.invoke(event, detail, aiUpgraded)
     }
 
     private fun passesAlertPolicy(

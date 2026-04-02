@@ -34,6 +34,12 @@ data class RideSummary(
 
     // Effort sets (avg watts per effort interval, in order)
     val effortSetAvgPowers: List<Int> = emptyList(),
+
+    // AI coaching stats (v1.2+)
+    val alertsFired: Int = 0,
+    val aiUpgrades: Int = 0,
+    val aiFailures: Int = 0,
+    val suppressedCount: Int = 0,
 )
 
 /**
