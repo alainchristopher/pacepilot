@@ -2,7 +2,7 @@
 
 Status: Execution PRD (source of truth for delivery)
 Owner: PacePilot core
-Updated: 2026-03-11
+Updated: 2026-03-20
 
 ## 1) Product Objective
 
@@ -37,90 +37,67 @@ Primary success outcome:
 
 ## 4) Phased Delivery Plan
 
-## Phase 0 — Hardening Baseline (Week 0-1)
+## Phase 0 — Hardening Baseline ✅ SHIPPED (v1.0)
 
 Deliverables:
-- Alert text policy and truncation safeguards
-- Lifecycle and process-restart hardening
-- Instrumentation hooks (alerts fired, suppressed, upgraded)
+- Alert text policy and truncation safeguards ✅
+- Lifecycle and process-restart hardening ✅
+- Instrumentation hooks (alerts fired, suppressed, upgraded) ✅
 
-Acceptance criteria:
-- No crash in 3x 90-minute rides.
-- Alert messages never visually overflow known Karoo constraints.
-- Logs include counters for fired/suppressed/upgraded alerts.
-
-Non-goals:
-- No new external integrations.
-- No redesign of coaching logic.
-
-## Phase 1 — Coaching Surface + Trust Layer (Week 1-4) [P0]
+## Phase 1 — Coaching Surface + Trust Layer ✅ SHIPPED (v1.1)
 
 Deliverables:
-- 3 PacePilot data fields: coaching_status, zone_time_sec, ride_score
-- Snooze + undo snooze actions
-- FIT developer-field export for coaching events
-- Active-ride state snapshot and restore
+- 3 PacePilot data fields: coaching_status, zone_time_sec, ride_score ✅
+- Snooze + undo snooze actions ✅
+- FIT developer-field export for coaching events ✅
+- Active-ride state snapshot and restore ✅
 
-Acceptance criteria:
-- Data fields selectable and updating during ride.
-- Undo Snooze re-enables alerts immediately.
-- FIT file contains developer fields for coaching events.
-- Service restart during ride recovers state in <= 2s.
-
-Non-goals:
-- No weather/wind-aware pacing yet.
-- No post-ride AI summary yet.
-
-## Phase 2 — Smart Fueling (Week 5-8) [P1]
+## Phase 2 — Smart Fueling ✅ SHIPPED (v1.1)
 
 Deliverables:
-- Intensity-aware carbs/hour target engine
-- Absorption-window timing cues
-- Terrain-aware fueling prompts
-- NomRide adapter + internal fallback estimator
+- Weight-based intensity-aware carbs/hour target engine ✅
+- Terrain-aware fueling prompts (climb mode + endurance mode) ✅
+- NomRide adapter + internal fallback estimator ✅
+- Fueling reminders in CLIMB_FOCUSED mode (bug fix) ✅
 
-Acceptance criteria:
-- Carb target updates by effort level (zone-dependent).
-- Pre-effort fueling prompts trigger when deficit and timing conditions are met.
-- NomRide presence toggles data source without crashes.
-
-Non-goals:
-- No full nutrition planner UI.
-- No third-party cloud nutrition sync.
-
-## Phase 3 — Climb + Route Strategy (Week 9-12) [P1/P2]
+## Phase 3 — Climb + Route Strategy ✅ SHIPPED (v1.1)
 
 Deliverables:
-- Upcoming climb preparation alerts
-- Multi-climb effort budgeting signal
-- Summit proximity pacing cues
-- Optional 7Climb/Headwind adapters with fallback
+- Upcoming climb preparation alerts ✅
+- Multi-climb effort budgeting signal ✅
+- Summit proximity pacing cues ✅
+- 7Climb and Headwind adapters with graceful fallback ✅
+- Workout-type-aware coaching policies ✅
 
-Acceptance criteria:
-- Pre-climb cue fires before major climbs on routed rides.
-- Budget guidance adjusts based on remaining climbing.
-- Missing external adapters does not degrade core coaching stability.
-
-Non-goals:
-- No race calendar/event planning.
-- No map rendering overlays.
-
-## Phase 4 — Intelligence + Retention (Week 13-16) [P2]
+## Phase 4 — Intelligence + Retention ✅ SHIPPED (v1.1)
 
 Deliverables:
-- Post-ride explainable summary
-- Event timeline and pattern insights
-- Finish-line strategy mode (negative split helper)
-- Release cadence and changelog discipline
+- Post-ride explainable summary ✅
+- Event timeline and pattern insights ✅
+- Mercury-2 AI provider alongside Gemini ✅
+- FIT-file backtest replay in test suite ✅
+
+Remaining from Phase 4 → moved to v1.2:
+- Finish-line strategy mode (negative split helper) — pending
+- Release cadence documentation — playbook written, tagging discipline ongoing
+
+## Phase 5 — v1.2 (next)
+
+Deliverables:
+- Wind-adjusted pacing (Headwind data ingested; coaching logic pending)
+- Finish-line / negative-split strategy mode
+- Log Fuel BonusAction (in-ride carb entry without NomRide)
+- Hammerhead Extension Library submission
 
 Acceptance criteria:
-- Post-ride summary generated without network dependency on core output.
-- Pattern insights appear after sufficient ride history.
-- Tagged release artifacts and changelog published per release.
+- Wind-pacing cue fires when relative wind > 15 km/h headwind and rider is above power budget.
+- Finish-line mode activates in final 20% of planned route distance.
+- Log Fuel action increments carb balance without requiring NomRide.
+- Extension Library application submitted with required metadata.
 
 Non-goals:
 - No coach web dashboard.
-- No subscription paywall implementation.
+- No subscription paywall.
 
 ## 5) Product Requirements by Pillar
 

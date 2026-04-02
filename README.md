@@ -55,12 +55,13 @@ Key design decisions:
 
 ## Setup
 
-### Prerequisites
-- Android Studio or Gradle CLI
-- Hammerhead Karoo 2/3
-- GitHub account (for `karoo-ext` SDK access)
+### Just want to ride?
 
-### Build
+Download the APK from the [releases page](https://github.com/alainchristopher/pacepilot/releases) and skip to **Install on Karoo** below.
+
+### Build from source
+
+Requires Android Studio or Gradle CLI and a GitHub account (the `karoo-ext` SDK is hosted on GitHub Packages).
 
 ```bash
 # 1. Clone
@@ -233,8 +234,28 @@ MIT
 
 ## Roadmap
 
-See [docs/pacepilot-ship-prd-v2.1.md](docs/pacepilot-ship-prd-v2.1.md) for the full phased delivery plan.
+### v1.1 — shipped ✓
+- App toggle (master on/off)
+- Weight-based carb calculation from Karoo profile
+- Workout-type-aware coaching (Sweet Spot / Threshold / VO2max)
+- Fueling + drink reminders in climb mode (was missing)
+- Pre-climb prep cues + multi-climb effort budgeting
+- NomRide, 7Climb, Headwind adapters (graceful fallback)
+- 3 custom data fields: coaching_status, zone_time_sec, ride_score
+- Snooze 15 min + Undo Snooze BonusActions
+- Alert policy: min gap + max per hour
+- FIT developer-field export for coaching events
+- Active-ride state snapshot every 30s — restored on service restart
+- Post-ride summary + pattern detection
+- Mercury-2 AI provider alongside Gemini 2.0 Flash
+- FIT-file backtest replay in unit test suite
 
-**Shipped:** Coaching data fields, snooze/undo, FIT export, state resilience, weight-based fueling, NomRide/7Climb/Headwind adapters, pre-climb prep, multi-climb effort budgeting, fueling in climb mode, post-ride summary + patterns, Gemini + Mercury-2 AI providers, app toggle.
+### v1.2 — planned
+- Wind-adjusted pacing (Headwind data already ingested, coaching logic pending)
+- Finish-line / negative-split strategy mode
+- Log Fuel BonusAction (in-ride carb logging without NomRide)
+- Hammerhead Extension Library submission
 
-**Planned (ship PRD):** Wind-adjusted pacing (Headwind integration), finish-line / negative-split mode, release cadence discipline.
+### Later
+- Companion phone app for post-ride review
+- Intervals.icu / TrainingPeaks plan sync
