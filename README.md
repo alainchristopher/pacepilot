@@ -18,6 +18,7 @@ PacePilot watches your power, heart rate, cadence, and workout data in real time
 - **Gemini 2.0 Flash** — recommended, context caching, ~$0.01/ride
 - **Mercury-2** — experimental, 1,000+ tokens/sec via Inception Labs (10M free tokens)
 - 30-ride rolling history for personalization
+- **✦ indicator** on alert title when AI has upgraded the message — fallback is silent
 - Falls back to rule-based if offline — rider always gets a message
 
 **Integrations** (graceful fallback when absent):
@@ -99,7 +100,7 @@ Enable developer mode on Karoo first: **Settings → About → tap Build number 
 brew install android-platform-tools
 
 # Plug in via USB, allow debugging when Karoo prompts, then:
-adb install -r PacePilot-v1.1.0.apk
+adb install -r PacePilot-v1.3.0.apk
 ```
 
 Windows: download [platform-tools](https://developer.android.com/tools/releases/platform-tools), unzip, run `adb install -r` from that folder.
@@ -109,7 +110,7 @@ Windows: download [platform-tools](https://developer.android.com/tools/releases/
 ```bash
 # Enable Wireless Debugging on Karoo (Developer options), note the IP shown
 adb connect <karoo-ip>:5555
-adb install -r PacePilot-v1.1.0.apk
+adb install -r PacePilot-v1.3.0.apk
 ```
 
 #### Set API key via deep link (optional, ADB only)
@@ -145,6 +146,8 @@ Open PacePilot from the Karoo extensions menu:
 - **Coaching alerts** — Enable/disable, fueling reminders, alert frequency
 - **Alert policy** — Min gap between alerts, max alerts per hour
 - **AI coaching** — Choose provider: Gemini 2.0 Flash, Mercury-2, or Off
+- **Coaching language** — EN, DE, FR, NL, ES, IT, PT, DA, SV, NO. AI translates cues into your language
+- **Analytics** — Opt-in anonymous usage data (improves the app)
 - **Snooze / Undo** — 15-min snooze or undo via BonusActions on alerts
 
 ## AI Coaching Details
@@ -250,10 +253,19 @@ MIT
 - Mercury-2 AI provider alongside Gemini 2.0 Flash
 - FIT-file backtest replay in unit test suite
 
-### v1.2 — planned
+### v1.2 — shipped ✓
+- Auto-acknowledge fueling — app assumes you eat/drink when prompted (no manual logging)
+- Automated GitHub Actions CI — APK built on every push
+- Analytics opt-in (PostHog) — AI success rate, alert counts, no GPS/personal data
+
+### v1.3 — shipped ✓
+- **Coaching language** — 10 languages, AI translates cues in real time
+- **AI indicator** — Alert title shows ✦ when Mercury/Gemini upgraded the message
+- CI pipeline fully operational with `GPR_KEY` secret
+
+### v1.4 — planned
 - Wind-adjusted pacing (Headwind data already ingested, coaching logic pending)
 - Finish-line / negative-split strategy mode
-- Log Fuel BonusAction (in-ride carb logging without NomRide)
 - Hammerhead Extension Library submission
 
 ### Later
