@@ -42,6 +42,7 @@ class SettingsRepository(context: Context) {
             .putInt(KEY_CARB_TARGET_GPH, settings.carbTargetGramsPerHour)
             .putInt(KEY_CARBS_PER_SERVING, settings.carbsPerFuelServing)
             .putInt(KEY_DRINK_INTERVAL_MIN, settings.drinkReminderMinutes)
+            .putString(KEY_COACHING_LANGUAGE, settings.coachingLanguage)
             .putBoolean(KEY_ANALYTICS_ENABLED, settings.analyticsEnabled)
             .commit() // synchronous — ensures service reads the updated value immediately
         _settings.value = settings
@@ -71,6 +72,7 @@ class SettingsRepository(context: Context) {
         carbTargetGramsPerHour = prefs.getInt(KEY_CARB_TARGET_GPH, 60),
         carbsPerFuelServing = prefs.getInt(KEY_CARBS_PER_SERVING, 25),
         drinkReminderMinutes = prefs.getInt(KEY_DRINK_INTERVAL_MIN, 20),
+        coachingLanguage = prefs.getString(KEY_COACHING_LANGUAGE, "en") ?: "en",
         analyticsEnabled = prefs.getBoolean(KEY_ANALYTICS_ENABLED, false),
     )
 
@@ -95,6 +97,7 @@ class SettingsRepository(context: Context) {
         private const val KEY_CARB_TARGET_GPH = "carb_target_gph"
         private const val KEY_CARBS_PER_SERVING = "carbs_per_serving"
         private const val KEY_DRINK_INTERVAL_MIN = "drink_interval_min"
+        private const val KEY_COACHING_LANGUAGE = "coaching_language"
         private const val KEY_ANALYTICS_ENABLED = "analytics_enabled"
     }
 }

@@ -107,12 +107,13 @@ class CoachingEngine(
             LlmProvider.MERCURY -> if (settings.mercuryApiKey.isNotBlank()) MercuryClient(settings.mercuryApiKey) else null
             LlmProvider.DISABLED -> null
         }
+        val lang = settings.coachingLanguage
         aiClient?.let { client ->
             // Init async — coaching starts immediately with static fallback until ready
             scope.launch {
-                val stableContext = CoachingContextBuilder.buildStableContext(historyProvider())
-                client.initRide(CoachingContextBuilder.SYSTEM_PROMPT, stableContext)
-                Timber.i("CoachingEngine: AI provider ${settings.llmProvider} ready")
+                val stableContext = CoachingContextBuilder.buildStableContext(historyProvider(), lang)
+                client.initRide(CoachingContextBuilder.systemPromptForLanguage(lang), stableContext)
+                Timber.i("CoachingEngine: AI provider ${settings.llmProvider} ready, language=$lang")
             }
         }
 
@@ -173,8 +174,9 @@ class CoachingEngine(
             }
             aiClient = newClient
             scope.launch {
-                val stableContext = CoachingContextBuilder.buildStableContext(historyProvider())
-                newClient.initRide(CoachingContextBuilder.SYSTEM_PROMPT, stableContext)
+                val l = settings.coachingLanguage
+                val stableContext = CoachingContextBuilder.buildStableContext(historyProvider(), l)
+                newClient.initRide(CoachingContextBuilder.systemPromptForLanguage(l), stableContext)
             }
         } else if (!needsClient) {
             val old = aiClient
@@ -279,7 +281,9 @@ class CoachingEngine(
         // Karoo screen truncates around 30 chars on the narrow display
         val detail = if (message.length > 30) message.take(28) + "…" else message
         Timber.i("CoachingEngine: rule=${event.ruleId} priority=${event.priority} ai=$aiUpgraded → \"$detail\"")
-        val (bgColor, textColor, title) = alertAppearance(event.alertStyle)
+        val (bgColor, textColor, baseTitle) = alertAppearance(event.alertStyle)
+        // Prepend small AI indicator so rider knows whether hotspot AI is active
+        val title = if (aiUpgraded) "✦ $baseTitle" else baseTitle
         karooSystem.dispatch(
             InRideAlert(
                 id = "pp_${event.ruleId}",

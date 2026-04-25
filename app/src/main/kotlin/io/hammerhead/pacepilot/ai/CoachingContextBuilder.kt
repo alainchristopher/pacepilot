@@ -30,6 +30,19 @@ object CoachingContextBuilder {
     // Stable context (cached per ride)
     // ----------------------------------------------------------------
 
+    private val LANGUAGE_NAMES = mapOf(
+        "en" to "English",
+        "de" to "German (Deutsch)",
+        "fr" to "French (Français)",
+        "nl" to "Dutch (Nederlands)",
+        "es" to "Spanish (Español)",
+        "it" to "Italian (Italiano)",
+        "pt" to "Portuguese (Português)",
+        "da" to "Danish (Dansk)",
+        "sv" to "Swedish (Svenska)",
+        "nb" to "Norwegian (Norsk)",
+    )
+
     val SYSTEM_PROMPT = """
 You are an elite cycling coach speaking directly to a rider mid-ride via their Karoo bike computer.
 
@@ -44,12 +57,18 @@ OUTPUT RULES — NON-NEGOTIABLE:
 - Never explain yourself. Just the cue.
 """.trim()
 
+    fun systemPromptForLanguage(languageCode: String): String {
+        if (languageCode == "en") return SYSTEM_PROMPT
+        val langName = LANGUAGE_NAMES[languageCode] ?: languageCode
+        return SYSTEM_PROMPT + "\n- IMPORTANT: Respond in $langName only. Keep messages short — $langName words tend to be longer than English."
+    }
+
     /**
      * Builds the stable block that will be cached with Gemini.
      * Include: system instructions, rider profile, historical patterns.
      */
-    fun buildStableContext(history: RideHistory): String = buildString {
-        appendLine(SYSTEM_PROMPT)
+    fun buildStableContext(history: RideHistory, languageCode: String = "en"): String = buildString {
+        appendLine(systemPromptForLanguage(languageCode))
         appendLine()
         appendLine("---")
         appendLine()

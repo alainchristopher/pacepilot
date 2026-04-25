@@ -354,6 +354,24 @@ fun PacePilotSettingsScreen(
             )
         }
 
+        // --- Language Card ---
+        SettingsCard(title = "COACHING LANGUAGE", alpha = sectionAlpha) {
+            Text("AI message language", color = TextPrimary, fontSize = 13.sp)
+            Spacer(modifier = Modifier.height(6.dp))
+            LanguageChips(
+                selected = settings.coachingLanguage,
+                onSelect = { settings = settings.copy(coachingLanguage = it) },
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                if (settings.coachingLanguage == "en") "Messages in English (default)"
+                else "AI will translate cues — messages stay ≤12 words",
+                color = TextTertiary,
+                fontSize = 11.sp,
+                lineHeight = 14.sp,
+            )
+        }
+
         // --- Analytics Card ---
         SettingsCard(title = "ANALYTICS", alpha = sectionAlpha) {
             ToggleRow("Help improve PacePilot", settings.analyticsEnabled) {
@@ -649,6 +667,57 @@ private fun ModeChips(
         }
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
             options.drop(3).forEach { (mode, label) -> Chip(mode, label) }
+        }
+    }
+}
+
+@Composable
+private fun LanguageChips(
+    selected: String,
+    onSelect: (String) -> Unit,
+) {
+    val languages = listOf(
+        "en" to "EN",
+        "de" to "DE",
+        "fr" to "FR",
+        "nl" to "NL",
+        "es" to "ES",
+        "it" to "IT",
+        "pt" to "PT",
+        "da" to "DA",
+        "sv" to "SV",
+        "nb" to "NO",
+    )
+
+    @Composable
+    fun RowScope.LangChip(code: String, label: String) {
+        val isSelected = selected == code
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .clip(RoundedCornerShape(6.dp))
+                .border(1.dp, if (isSelected) Primary else FieldBorder, RoundedCornerShape(6.dp))
+                .background(if (isSelected) PrimaryMuted else Color.Transparent)
+                .clickable { onSelect(code) }
+                .padding(vertical = 7.dp, horizontal = 2.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = label,
+                color = if (isSelected) Primary else TextSecondary,
+                fontSize = 11.sp,
+                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                textAlign = TextAlign.Center,
+            )
+        }
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+            languages.take(5).forEach { (code, label) -> LangChip(code, label) }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+            languages.drop(5).forEach { (code, label) -> LangChip(code, label) }
         }
     }
 }

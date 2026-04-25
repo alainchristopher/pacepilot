@@ -61,6 +61,12 @@ data class UserSettings(
     val mercuryApiKey: String = "",
 
     // ----------------------------------------------------------------
+    // Language
+    // ----------------------------------------------------------------
+    /** Coaching language for AI-generated messages (e.g. "en", "de", "fr", "nl", "es", "it") */
+    val coachingLanguage: String = "en",
+
+    // ----------------------------------------------------------------
     // Analytics
     // ----------------------------------------------------------------
     /** Opt-in consent for anonymous product analytics (PostHog) */
