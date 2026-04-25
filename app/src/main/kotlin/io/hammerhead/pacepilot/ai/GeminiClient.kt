@@ -36,14 +36,25 @@ class GeminiClient(private val apiKey: String) : AiCoachingClient {
         // via system_instruction + cached_content when supported, otherwise plain calls.
         private const val GENERATE_ENDPOINT = "$BASE/$MODEL:generateContent"
         private const val CACHE_ENDPOINT = "$BASE/cachedContents"
-        private const val TIMEOUT_SEC = 6L
+        // Generate runs on the alert critical path (must beat 6–12s auto-dismiss).
+        private const val TIMEOUT_GEN_SEC = 6L
+        // initRide is off-path and is the first call after a hotspot connect — DNS+TLS can take 3–5s.
+        private const val TIMEOUT_INIT_SEC = 15L
         private val JSON_MEDIA = "application/json".toMediaType()
     }
 
-    private val http = OkHttpClient.Builder()
-        .connectTimeout(TIMEOUT_SEC, TimeUnit.SECONDS)
-        .readTimeout(TIMEOUT_SEC, TimeUnit.SECONDS)
-        .writeTimeout(TIMEOUT_SEC, TimeUnit.SECONDS)
+    // httpGen derives from httpInit so they share a ConnectionPool: the cache
+    // create acts as warm-up, and per-event generate calls reuse the warm TLS.
+    private val httpInit = OkHttpClient.Builder()
+        .connectTimeout(TIMEOUT_INIT_SEC, TimeUnit.SECONDS)
+        .readTimeout(TIMEOUT_INIT_SEC, TimeUnit.SECONDS)
+        .writeTimeout(TIMEOUT_INIT_SEC, TimeUnit.SECONDS)
+        .build()
+
+    private val httpGen = httpInit.newBuilder()
+        .connectTimeout(TIMEOUT_GEN_SEC, TimeUnit.SECONDS)
+        .readTimeout(TIMEOUT_GEN_SEC, TimeUnit.SECONDS)
+        .writeTimeout(TIMEOUT_GEN_SEC, TimeUnit.SECONDS)
         .build()
 
     private val json = Json { ignoreUnknownKeys = true }
@@ -102,21 +113,28 @@ class GeminiClient(private val apiKey: String) : AiCoachingClient {
             .post(body.toRequestBody(JSON_MEDIA))
             .build()
 
-        runCatching {
-            http.newCall(request).execute().use { resp ->
-                if (!resp.isSuccessful) {
-                    Timber.w("Gemini cache create HTTP ${resp.code} — will use uncached calls")
-                    return@withContext null
+        // One retry: hotspot link often needs a few seconds to stabilize at ride start.
+        repeat(2) { attempt ->
+            val result = runCatching {
+                httpInit.newCall(request).execute().use { resp ->
+                    if (!resp.isSuccessful) {
+                        Timber.w("Gemini cache create HTTP ${resp.code} (attempt ${attempt + 1})")
+                        return@use null
+                    }
+                    val root = json.parseToJsonElement(resp.body?.string() ?: return@use null).jsonObject
+                    val name = root["name"]?.jsonPrimitive?.content
+                    Timber.i("GeminiClient: cache created: $name")
+                    name
                 }
-                val root = json.parseToJsonElement(resp.body?.string() ?: return@withContext null).jsonObject
-                val name = root["name"]?.jsonPrimitive?.content
-                Timber.i("GeminiClient: cache created: $name")
-                name
+            }.getOrElse {
+                Timber.w(it, "GeminiClient: cache creation failed (attempt ${attempt + 1})")
+                null
             }
-        }.getOrElse {
-            Timber.w(it, "GeminiClient: cache creation failed")
-            null
+            if (result != null) return@withContext result
+            if (attempt == 0) kotlinx.coroutines.delay(2_000)
         }
+        Timber.w("Gemini cache create failed after retry — will use uncached calls")
+        null
     }
 
     /** Delete a previously created cache (best-effort, fire-and-forget). */
@@ -127,7 +145,7 @@ class GeminiClient(private val apiKey: String) : AiCoachingClient {
                 .url("$BASE/$cacheName?key=$apiKey")
                 .delete()
                 .build()
-            http.newCall(request).execute().close()
+            httpInit.newCall(request).execute().close()
             Timber.i("GeminiClient: cache deleted: $cacheName")
         }
     }
@@ -182,7 +200,7 @@ class GeminiClient(private val apiKey: String) : AiCoachingClient {
                 .build()
 
             runCatching {
-                http.newCall(request).execute().use { resp ->
+                httpGen.newCall(request).execute().use { resp ->
                     if (!resp.isSuccessful) {
                         Timber.w("Gemini cached gen HTTP ${resp.code}")
                         return@withContext null
@@ -220,7 +238,7 @@ class GeminiClient(private val apiKey: String) : AiCoachingClient {
                 .build()
 
             runCatching {
-                http.newCall(request).execute().use { resp ->
+                httpGen.newCall(request).execute().use { resp ->
                     if (!resp.isSuccessful) {
                         Timber.w("Gemini uncached gen HTTP ${resp.code}: ${resp.body?.string()?.take(300)}")
                         return@withContext null
