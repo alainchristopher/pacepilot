@@ -33,6 +33,7 @@ androidx-glance-appwidget = { group = "androidx.glance", name = "glance-appwidge
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version = "1.13.1" }
 
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
+okhttp-mockwebserver = { group = "com.squareup.okhttp3", name = "mockwebserver", version.ref = "okhttp" }
 posthog = { group = "com.posthog", name = "posthog-android", version.ref = "posthog" }
 
 junit = { group = "junit", name = "junit", version.ref = "junit" }
