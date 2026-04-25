@@ -411,7 +411,7 @@ fun PacePilotSettingsScreen(
 
         // Version tag
         Text(
-            text = "v1.2 · PacePilot",
+            text = "v1.3 · PacePilot",
             color = TextTertiary,
             fontSize = 10.sp,
             textAlign = TextAlign.Center,

@@ -1,0 +1,219 @@
+To view keyboard shortcuts, press question mark
+View keyboard shortcuts
+
+512,000 lines of CLAUDE CODE leaked here's what's inside and how to use it
+self.dll
+
+@seelffff
+·
+Apr 4
+
+DISCLAMER 
+This article is for educational purposes only. The leaked code belongs to Anthropic. On March 31, 2026, attackers distributed trojanized npm packages (axios 1.14.1 / 0.30.4) containing a Remote Access Trojan. If you updated Claude Code via npm between 00:21-03:29 UTC that day, your machine may be compromised. Check your lockfiles, rotate all secrets, and use only the official installer:
+bash
+curl -fsSL https://claude.ai/install.sh | bash
+Chapter 1: The Night Everything Leaked
+It was 4:23 in the morning on March 31 2026. Most of the Anthropic team was asleep. A college intern named Chaofan Shou working at an unrelated crypto startup called Solayer Labs was doing something mundane: inspecting the npm package for Claude Code, Anthropic's flagship AI coding tool.
+What he found was not mundane. Inside the package was a file that should never have been there: a 59.8 megabyte source map. For anyone unfamiliar a source map is a debugging artifact. It maps compressed production code back to the original human-readable source. It is meant for internal use only. It was never supposed to ship.
+But it did. And inside that single file were 512,000 lines of TypeScript spread across 1,900 files. Not snippets. Not fragments. The entire Claude Code codebase. Every tool, every prompt, every hidden feature, every internal codename, every security mechanism. Everything.
+Shou posted his discovery on X. Within minutes developers around the world began downloading, mirroring and analyzing the code. By sunrise a clean-room rewrite called claw-code had already hit 50,000 GitHub stars. By noon it crossed 100,000 making it the fastest-growing repository in GitHub history
+How One Missing Line Caused the Leak
+The technical cause is almost embarrassingly simple. Claude Code runs on Bun, a JavaScript runtime that Anthropic acquired in late 2025. Bun has a quirk: it generates source maps by default. This was a known bug reported on March 11 2026, three weeks before the leak. The bug report is still open.
+*To prevent source maps from being included in published packages, developers add .map to a file called .npmignore. This file tells npm which files to exclude when publishing. Someone on the release team forgot to add that line. One missing line in one file exposed half a million lines of proprietary code.
+The irony is hard to overstate. Deep inside the leaked code there is a feature called Undercover Mode. Its sole purpose is to prevent Anthropic's internal secrets from leaking through code contributions. They built an AI system to prevent leaks. Then a human forgot one line in a config file and leaked everything.
+Boris Cherny, an engineer on the Claude Code team, responded publicly:
+"Mistakes happen. As a team the important thing is to recognize it's never an individual's fault. It's the process, the culture or the infra."
+Key Figures
+59.8 MB source map | 512,000+ lines of TypeScript | ~1,900 files
+44 hidden feature flags | 108 closed modules | 20+ unreleased features
+46,000 lines of query engine | ~40 tools | 23 bash security checks
+Chapter 2: What's Actually Inside
+
+Before we dive into the specifics it helps to understand what Claude Code actually is. Most people think of it as a chatbot for writing code. It is not. The leaked source reveals that Claude Code is closer to an operating system for AI agents. It has a tool system, a security layer, a multi-agent coordinator, a query engine spanning 46,000 lines and an unreleased autonomous daemon that can work while you sleep.
+Here is a high-level view of how the pieces fit together:
+
+Figure 1: Claude Code Internal Architecture
+Bun Runtime (acquired 2025) + Native Zig HTTP Layer
+
+
+Let's break down the most important components starting with the one that affects every single interaction:
+
+The System Prompt: How Anthropic Tells Claude to Behave
+Every time you use Claude Code a hidden system prompt is loaded before your message. This prompt defines Claude's personality its limitations and its rules.
+Thanks to the leak we can read the exact text for the first time.
+Here are the most revealing sections with explanations of why they matter.
+Rule 1: No Flattery
+latex
+"Prioritize technical accuracy and truthfulness over validating the user's beliefs."
+
+"Avoid using over-the-top validation or excessive praise when responding to users such as 'You're absolutely right.'"
+What this means: Anthropic explicitly instructs Claude not to agree with you just to be nice. If your code is bad, Claude should say so. This is significant because most AI assistants default to validating the user. Claude Code is designed to push back. If you've ever noticed Claude disagreeing with your approach this is why.
+
+Rule 2: No Time Estimates
+plaintext
+"Never give time estimates or predictions for how long tasks will take."
+
+"Avoid phrases like 'this will take me a few minutes' or 'should be done in about 5 minutes.'"
+What this means: Anthropic discovered that AI time estimates are unreliable and create false confidence. If Claude says 'this will take 2 minutes' and it takes 20, the user blames the tool. So they removed the capability entirely. A useful lesson for anyone building AI products.
+
+Rule 3: Don't Over-Engineer
+plaintext
+"Don't add features, refactor code or make improvements beyond what was asked."
+"Three similar lines of code is better than a premature abstraction."
+What this means: if you ask Claude to fix a bug it should fix exactly that bug. Not refactor the surrounding code. Not add error handling you didn't ask for. Not create an abstraction 'for future use.' Anthropic learned that over-engineering creates more problems than it solves. Three repetitive lines are better than one clever helper function nobody understands.
+
+Rule 4: Track Everything
+plaintext
+"Use TodoWrite tools VERY frequently to ensure that you are tracking your tasks."
+"If you do not use this tool when planning you may forget to do important tasks – and that is unacceptable."
+What this means: even Anthropic's own AI forgets steps when working on complex tasks. Their solution? Force Claude to write down every step before starting and check them off as it goes. This is not a minor detail. It means that any multi-step AI workflow you build should include explicit task tracking. Don't trust the model's memory alone.
+Chapter 3: KAIROS — The Agent That Never Sleeps
+Of everything found in the leak, KAIROS generated the most discussion. It is referenced over 150 times in the code. The name comes from Ancient Greek: kairos means 'the opportune moment,' the perfect time to act. Unlike chronos, which is sequential clock time, kairos is about recognizing when to engage.
+KAIROS is a fully built but unreleased feature that transforms Claude Code from a tool you ask questions to into an agent that watches, thinks, and acts on its own.
+How It Works
+KAIROS operates as a background daemon. Every 15 seconds, it receives a 'tick' prompt and decides: should I act, or should I wait? If the user is active, KAIROS stays quiet. If the user is idle, it starts working.
+// What KAIROS has access to (from the leaked source):
+
+// 1. Push notifications — reaches you even when
+//    your terminal is closed
+// 2. File delivery — can send you files it created
+//    without being asked
+// 3. PR subscriptions — watches your GitHub repos
+//    and reacts to code changes automatically
+// 4. Append-only daily logs — records everything
+//    it observed, decided, and did. Cannot erase
+//    its own history.
+Why this matters: today, AI coding tools wait for you to ask a question. KAIROS doesn't wait. It monitors your codebase, notices issues, and fixes them in the background. Close your laptop on Friday. Open it on Monday. KAIROS has been working the entire weekend.
+
+autoDream: How AI Consolidates Memory
+The most fascinating sub-feature of KAIROS is called autoDream. During idle time, KAIROS spawns a separate process (a 'forked subagent') that reviews everything it learned during the day and consolidates it.
+// The autoDream process runs four phases:
+
+// Phase 1: Collect unprocessed observations
+//   (everything KAIROS noticed during the day)
+
+// Phase 2: Remove contradictions
+//   (if two observations conflict, resolve them)
+
+// Phase 3: Convert vague insights to absolute facts
+//   ('user seems to prefer X' becomes
+//    'user uses X in 94% of cases')
+
+// Phase 4: Store in long-term memory
+//   (the dream agent has read-only bash access
+//    to verify facts against the actual codebase)
+In plain English: KAIROS literally 'dreams.' It reviews its day, removes things that don't make sense, converts hunches into facts, and files everything away for tomorrow. The dream process runs in a separate thread so it doesn't interfere with the main agent's thinking. This is the same architecture that video games use to run background tasks without slowing down the main loop.
+Chapter 4: Anti-Distillation — Poisoning the Competition
+Anthropic knows that competitors record Claude Code's API traffic to train their own models. This is called 'distillation' — capturing the outputs of a better model to train a cheaper one. The leaked code reveals two defense mechanisms.
+Defense 1: Fake Tool Injection
+// claude.ts, lines 301-313:
+
+// When four conditions are true:
+// 1. ANTI_DISTILLATION_CC flag is on
+// 2. Running from the CLI (not the SDK)
+// 3. Using Anthropic's own API (not third-party)
+// 4. GrowthBook feature flag is enabled
+
+// ...the client sends this in the API request:
+request.anti_distillation = ['fake_tools']
+
+// The server then silently injects fake tool
+// definitions into the system prompt.
+// If a competitor records this traffic,
+// their training data is poisoned with
+// tools that don't exist.
+In plain English: imagine you're a spy sending a message. Before sending, you add fake sentences that look real but are meaningless. Anyone who intercepts the message and tries to use it will be misled. That's what fake tool injection does. Claude still works normally. But anyone recording the conversation gets garbage mixed in with the real data.
+Defense 2: Cryptographic Summarization
+The second mechanism is subtler. When enabled, the API doesn't return Claude's full reasoning. Instead, it returns a summary with a cryptographic signature. On the next turn, the original text is restored from the signature. A competitor recording the traffic only captures the summaries, not the full chain of thought.
+Defense 3: Hardware-Level DRM
+API requests include a placeholder (cch=00000) in the billing header. Before the request leaves the computer, Bun's native HTTP layer (written in Zig, a low-level language) replaces those zeros with a computed hash. The server validates the hash to confirm the request came from a real Claude Code binary. This happens below the JavaScript layer, so it's invisible to any code running in JavaScript.
+In plain English: this is DRM for API calls. Like how Netflix verifies you're using a real Netflix app, Claude Code proves to the server that it's the real Claude Code client, not a knockoff.
+Chapter 5: Undercover Mode and Other Secrets
+Undercover Mode
+About 90 lines of code in a file called undercover.ts implement a feature that strips all traces of AI involvement when Anthropic employees contribute to public open-source projects.
+// When triggered (employee + public repo):
+
+// 1. System prompt injected:
+//    "You are operating UNDERCOVER..."
+//    "Do not blow your cover."
+//    "NEVER mention you are an AI."
+
+// 2. Co-Authored-By lines removed from git
+//    (these normally show AI contributed)
+
+// 3. Internal codenames blocked
+//    (Capybara, Tengu, Fennec won't appear)
+
+// 4. No force-OFF switch exists
+//    "There is NO force-OFF. This guards
+//     against model codename leaks."
+What this means: when Anthropic employees use Claude Code to contribute to open-source projects, the code hides all evidence of AI involvement. Their commits look like they were written by a human. There's no way to disable this — the code comment explicitly says 'there is NO force-OFF.' Whether you see this as privacy protection or deception depends on your perspective.
+Internal Model Codenames
+The leak revealed the internal names Anthropic uses for its models:
+• Capybara = Claude 4.6
+• Fennec = Opus 4.6
+• Numbat = an unreleased model still in testing
+• Chicago = the Computer Use feature (screenshot + click + keyboard)
+Internal benchmarks also revealed a problem: Capybara v8 has a 29-30% false claims rate, up from 16.7% in v4. This means the model got worse at factual accuracy as it got more capable in other areas.
+BUDDY: Your AI Pet
+Perhaps the most unexpected discovery was a complete Tamagotchi-style companion system. Type /buddy in Claude Code and you get a randomly generated ASCII pet with rarity tiers (Common to Legendary), a 1% chance of being 'shiny,' and five stats: Debugging, Patience, Chaos, Wisdom, and Snark. The species is generated deterministically from your user ID, so your buddy is always the same. Planned launch: May 2026.
+ULTRAPLAN: Cloud-Powered Thinking
+For complex tasks, Claude Code can offload planning to a cloud session running Opus 4.6 with up to 30 minutes of dedicated thinking time. You monitor and approve the plan from your browser before it executes locally. A special value called __ULTRAPLAN_TELEPORT_LOCAL__ transfers the result back to your terminal.
+Chapter 6: The Prompt Architecture — What You Can Steal
+Now we get to the practical part. The leaked system prompt is essentially a masterclass in prompt engineering. Here are the techniques Anthropic uses internally, explained so you can apply them to your own projects.
+Technique 1: Static/Dynamic Boundary
+Claude Code splits its system prompt into two sections with a clear boundary between them. Everything above the boundary never changes between sessions. Everything below changes every turn.
+plaintext
+// ABOVE THE BOUNDARY (static, cached):
+// - Who you are ('You are a trading analyst')
+// - Your rules ('Max 2% risk per trade')
+// - Your constraints ('Use Kelly criterion')
+// - Your personality ('Disagree when data says so')
+
+// ══════ DYNAMIC BOUNDARY ══════
+
+// BELOW THE BOUNDARY (dynamic, refreshed):
+// - Current data ('BTC: $84,200')
+// - Today's context ('Bankroll: $5,000')
+// - Session goal ('Find mispriced markets')
+Why this matters: when you use the Claude API, you pay for every token processed. If your system prompt is 2,000 tokens and it never changes, those 2,000 tokens are cached and reused for free. Only the dynamic section costs money on subsequent calls. Anthropic reports this reduces costs by 60-80%. If you're building any AI application, implement this pattern immediately.
+Technique 2: Use Commands, Not Suggestions
+
+plaintext
+// How Anthropic writes constraints:
+"NEVER create files unless absolutely necessary."
+"ALWAYS prefer editing to creating new files."
+"You MUST use TodoWrite to track tasks."
+
+// How most people write constraints:
+"Try to keep responses concise."
+"Consider editing existing files when possible."
+"It would be helpful to track your progress."
+The difference: Anthropic uses NEVER, ALWAYS, MUST. These are hard constraints that the model treats as rules. 'Try to' and 'consider' are soft suggestions that the model frequently ignores. If you want Claude to actually follow an instruction, phrase it as a command, not a request.
+Technique 3: Anti-Validation Prompting
+plaintext
+// Claude Code's exact instruction:
+"Objective guidance and respectful correction
+ are more valuable than false agreement."
+
+// How to apply this in your own prompts:
+"If my thesis conflicts with the data, say so.
+ Do not agree with me to be polite.
+ I lose real money when you validate bad ideas.
+ Assume I'm wrong first. Prove me wrong.
+ If you can't prove me wrong, then I might be right."
+Why this is critical for trading: most people use AI to confirm what they already believe. This is dangerous. If you think BTC is going up and ask Claude for analysis, a default Claude will find reasons to agree with you. An anti-validation prompt forces Claude to attack your thesis first. Only if it survives the attack should you trust it.
+Technique 4: Forced Task Decomposition
+plaintext
+// Claude Code's pattern:
+"Use TodoWrite VERY frequently."
+"Break larger tasks into smaller steps."
+"Mark todos as completed as soon as done."
+
+// Your version:
+"Before doing anything, list ALL steps you will take.
+ Number them. As you complete each step,
+ say 'Step N complete' before moving to Step N+1.
+ If you skip a step, explain why.
+ If you add a step, explain why."
+Why this works: AI models lose track of complex multi-step tasks. By forcing the model to write steps down and check them off, you create a built-in error-correction mechanism. The model can look at its own list and realize 'I skipped step 4.' Without the list, it would have continued without noticing.

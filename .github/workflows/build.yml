@@ -24,7 +24,7 @@ jobs:
       - name: Build debug APK
         env:
           USERNAME: ${{ github.actor }}
-          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TOKEN: ${{ secrets.GPR_KEY }}
         run: ./gradlew assembleDebug
 
       - name: Upload APK artifact
