@@ -471,7 +471,7 @@ fun PacePilotSettingsScreen(
 
         // Version tag
         Text(
-            text = "v1.3.4 · PacePilot",
+            text = "v1.3.5 · PacePilot",
             color = TextTertiary,
             fontSize = 9.sp,
             letterSpacing = 0.5.sp,
@@ -858,8 +858,11 @@ private fun TestConnectionButton(
                         val elapsed = System.currentTimeMillis() - t0
                         status = result.fold(
                             onSuccess = { reply ->
-                                if (reply == "FALLBACK") "✗ No AI reply (${elapsed / 1000.0}s) — using fallback"
-                                else "✓ AI live (${elapsed / 1000.0}s) → \"${reply.take(40)}\""
+                                if (reply == "FALLBACK" || reply.isBlank()) {
+                                    "✗ No AI reply (${"%.1f".format(elapsed / 1000.0)}s) — using fallback (check key, Wi‑Fi, logcat: MercuryClient)"
+                                } else {
+                                    "✓ AI live (${"%.1f".format(elapsed / 1000.0)}s) → \"${reply.take(40)}\""
+                                }
                             },
                             onFailure = { "✗ ${it.javaClass.simpleName}: ${it.message?.take(60) ?: ""}" },
                         )

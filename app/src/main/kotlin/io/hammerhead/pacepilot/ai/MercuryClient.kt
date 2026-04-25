@@ -3,10 +3,11 @@ package io.hammerhead.pacepilot.ai
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
@@ -42,8 +43,9 @@ class MercuryClient(private val apiKey: String) : AiCoachingClient {
         private const val MODEL = "mercury-2"
         private const val REASONING_EFFORT = "low"
         private const val MAX_TOKENS = 100
-        // Generate runs on the alert critical path (must beat 6–12s auto-dismiss).
-        private const val TIMEOUT_GEN_SEC = 6L
+        // Mercury-2 reasons before emitting; 6s read timeouts were causing null
+        // responses (OkHttp throws) and "No AI reply" in the test + ride fallbacks.
+        private const val TIMEOUT_GEN_SEC = 30L
         // initRide is off-path and is the first call after a hotspot connect — DNS+TLS can take 3–5s.
         private const val TIMEOUT_INIT_SEC = 15L
         private val JSON_MEDIA = "application/json".toMediaType()
@@ -127,8 +129,9 @@ class MercuryClient(private val apiKey: String) : AiCoachingClient {
             // the very first generate a longer budget via httpInit so it has a fair
             // shot at landing instead of always hitting the rule fallback.
             val client = if (warmedUp) httpGen else httpInit
-            val result = generateCompletion(livePrompt, client) ?: fallback
-            if (!warmedUp && result !== fallback) warmedUp = true
+            val text = generateCompletion(livePrompt, client)?.takeIf { it.isNotBlank() }
+            val result = text ?: fallback
+            if (text != null) warmedUp = true
             result
         } catch (e: Exception) {
             Timber.w(e, "MercuryClient: generation failed, using fallback")
@@ -177,7 +180,6 @@ class MercuryClient(private val apiKey: String) : AiCoachingClient {
                 put("max_tokens", MAX_TOKENS)
                 put("temperature", 0.75)
                 put("reasoning_effort", REASONING_EFFORT)
-                put("stop", buildJsonArray { add(JsonPrimitive("\n")) })
             }.toString()
 
             val request = Request.Builder()
@@ -203,15 +205,39 @@ class MercuryClient(private val apiKey: String) : AiCoachingClient {
 
     private fun extractText(responseBody: String): String? {
         return runCatching {
-            json.parseToJsonElement(responseBody).jsonObject
+            val message = json.parseToJsonElement(responseBody).jsonObject
                 .get("choices")?.jsonArray
                 ?.firstOrNull()?.jsonObject
                 ?.get("message")?.jsonObject
-                ?.get("content")?.jsonPrimitive?.content
-                ?.let(::sanitiseCue)
+                ?: return@runCatching null
+            val raw = messageContentString(message) ?: return@runCatching null
+            val cue = sanitiseCue(raw)
+            if (cue.isBlank()) {
+                Timber.w("MercuryClient: empty cue after parse; body=${responseBody.take(300)}")
+                return@runCatching null
+            }
+            cue
         }.getOrElse {
             Timber.w(it, "MercuryClient: failed to parse response")
             null
+        }
+    }
+
+    private fun messageContentString(message: JsonObject): String? {
+        val c = message["content"] ?: return null
+        return when {
+            c is JsonPrimitive && c.isString -> c.content
+            c is JsonArray -> c.joinToString("") { part ->
+                when (part) {
+                    is JsonObject ->
+                        part["text"]?.jsonPrimitive?.content
+                            ?: part["content"]?.jsonPrimitive?.content
+                            ?: ""
+                    is JsonPrimitive -> part.content
+                    else -> ""
+                }
+            }
+            else -> null
         }
     }
 
