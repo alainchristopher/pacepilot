@@ -30,6 +30,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.hammerhead.pacepilot.ai.LlmProvider
+import kotlinx.coroutines.launch
 import io.hammerhead.pacepilot.analytics.AnalyticsManager
 import io.hammerhead.pacepilot.history.PostRideInsight
 import io.hammerhead.pacepilot.history.PostRideInsightsRepository
@@ -343,6 +344,12 @@ fun PacePilotSettingsScreen(
                     Spacer(modifier = Modifier.height(6.dp))
                     Text("Free at aistudio.google.com", color = TextTertiary, fontSize = 11.sp)
                     Spacer(modifier = Modifier.height(8.dp))
+                    TestConnectionButton(
+                        provider = LlmProvider.GEMINI,
+                        apiKey = settings.geminiApiKey,
+                        enabled = settings.appEnabled && settings.geminiApiKey.isNotBlank(),
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
                     InfoBanner(
                         text = "Personalised cues from live data + 30-ride history. Falls back to rule-based if offline.",
                         color = Success,
@@ -360,6 +367,12 @@ fun PacePilotSettingsScreen(
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     Text("10M free tokens at platform.inceptionlabs.ai", color = TextTertiary, fontSize = 11.sp)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TestConnectionButton(
+                        provider = LlmProvider.MERCURY,
+                        apiKey = settings.mercuryApiKey,
+                        enabled = settings.appEnabled && settings.mercuryApiKey.isNotBlank(),
+                    )
                     Spacer(modifier = Modifier.height(8.dp))
                     InfoBanner(
                         text = "Experimental — 1,000+ tokens/sec diffusion model. Sub-200ms responses. Sends full context per call (no server cache).",
@@ -458,7 +471,7 @@ fun PacePilotSettingsScreen(
 
         // Version tag
         Text(
-            text = "v1.3.2 · PacePilot",
+            text = "v1.3.3 · PacePilot",
             color = TextTertiary,
             fontSize = 9.sp,
             letterSpacing = 0.5.sp,
@@ -801,6 +814,82 @@ private fun LanguageChips(
         }
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
             languages.drop(5).forEach { (code, label) -> LangChip(code, label) }
+        }
+    }
+}
+
+@Composable
+private fun TestConnectionButton(
+    provider: LlmProvider,
+    apiKey: String,
+    enabled: Boolean,
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var status by remember { mutableStateOf<String?>(null) }
+    var testing by remember { mutableStateOf(false) }
+
+    Column {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .border(1.dp, if (enabled) Primary.copy(alpha = 0.5f) else FieldBorder, RoundedCornerShape(8.dp))
+                .background(if (enabled) PrimaryGhost else Color.Transparent)
+                .clickable(enabled = enabled && !testing) {
+                    testing = true
+                    status = "Testing…"
+                    scope.launch {
+                        val t0 = System.currentTimeMillis()
+                        val result = runCatching {
+                            val client: io.hammerhead.pacepilot.ai.AiCoachingClient = when (provider) {
+                                LlmProvider.GEMINI -> io.hammerhead.pacepilot.ai.GeminiClient(apiKey)
+                                LlmProvider.MERCURY -> io.hammerhead.pacepilot.ai.MercuryClient(apiKey)
+                                LlmProvider.DISABLED -> return@launch
+                            }
+                            client.initRide("Coach.", "Test ride context.")
+                            val gen = client.generate(
+                                "Test prompt — say one word.",
+                                fallback = "FALLBACK",
+                            )
+                            client.endRide()
+                            gen
+                        }
+                        val elapsed = System.currentTimeMillis() - t0
+                        status = result.fold(
+                            onSuccess = { reply ->
+                                if (reply == "FALLBACK") "✗ No AI reply (${elapsed / 1000.0}s) — using fallback"
+                                else "✓ AI live (${elapsed / 1000.0}s) → \"${reply.take(40)}\""
+                            },
+                            onFailure = { "✗ ${it.javaClass.simpleName}: ${it.message?.take(60) ?: ""}" },
+                        )
+                        testing = false
+                        Toast.makeText(context, status, Toast.LENGTH_LONG).show()
+                    }
+                }
+                .padding(vertical = 10.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = if (testing) "TESTING…" else "TEST AI CONNECTION",
+                color = if (enabled) Primary else TextTertiary,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 1.2.sp,
+            )
+        }
+        status?.let {
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = it,
+                color = when {
+                    it.startsWith("✓") -> Success
+                    it.startsWith("Testing") -> TextSecondary
+                    else -> Color(0xFFFF5252)
+                },
+                fontSize = 11.sp,
+                lineHeight = 14.sp,
+            )
         }
     }
 }

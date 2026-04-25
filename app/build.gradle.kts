@@ -13,8 +13,8 @@ android {
         applicationId = "io.hammerhead.pacepilot"
         minSdk = 23
         targetSdk = 34
-        versionCode = 6
-        versionName = "1.3.2"
+        versionCode = 7
+        versionName = "1.3.3"
     }
 
     buildTypes {
