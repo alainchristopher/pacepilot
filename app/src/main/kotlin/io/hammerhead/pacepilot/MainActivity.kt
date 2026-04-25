@@ -21,6 +21,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -36,19 +37,22 @@ import io.hammerhead.pacepilot.model.RideMode
 import io.hammerhead.pacepilot.settings.SettingsRepository
 import io.hammerhead.pacepilot.settings.UserSettings
 
-private val BG = Color(0xFF0A0A0A)
-private val CardBg = Color(0xFF141414)
-private val CardBorder = Color(0xFF1F1F1F)
+private val BG = Color(0xFF050505)
+private val CardBg = Color(0xFF111111)
+private val CardBorder = Color(0xFF1A1A1A)
 private val Primary = Color(0xFFFF6D00)
-private val PrimaryMuted = Color(0x33FF6D00)
-private val TextPrimary = Color(0xFFF0F0F0)
+private val PrimaryDim = Color(0xFFCC5700)
+private val PrimaryMuted = Color(0x29FF6D00)
+private val PrimaryGhost = Color(0x14FF6D00)
+private val TextPrimary = Color(0xFFF5F5F5)
 private val TextSecondary = Color(0xFF9E9E9E)
-private val TextTertiary = Color(0xFF616161)
+private val TextTertiary = Color(0xFF6B6B6B)
 private val Success = Color(0xFF00E676)
 private val SuccessMuted = Color(0x1A00E676)
-private val FieldBorder = Color(0xFF2A2A2A)
+private val FieldBorder = Color(0xFF242424)
 private val FieldBorderFocused = Color(0xFFFF6D00)
-private val CardShape = RoundedCornerShape(12.dp)
+private val CardShape = RoundedCornerShape(14.dp)
+private val PillShape = RoundedCornerShape(999.dp)
 
 class MainActivity : ComponentActivity() {
 
@@ -63,8 +67,10 @@ class MainActivity : ComponentActivity() {
         handleDeepLink()
 
         setContent {
+            // Re-read from disk every recomposition trigger — picks up deep-link / CLI updates
+            val currentSettings = remember(intent) { settingsRepo.current }
             PacePilotSettingsScreen(
-                initial = settingsRepo.current,
+                initial = currentSettings,
                 onSave = { settingsRepo.save(it) },
                 postRideInsightsRepo = postRideInsightsRepo,
             )
@@ -125,24 +131,54 @@ fun PacePilotSettingsScreen(
             .fillMaxSize()
             .background(BG)
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+            .padding(horizontal = 12.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        // Header
-        Column(modifier = Modifier.padding(bottom = 4.dp)) {
-            Text(
-                text = "PACEPILOT",
-                color = Primary,
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 3.sp,
-            )
-            Text(
-                text = "Intelligent cycling coach",
-                color = TextSecondary,
-                fontSize = 13.sp,
-                letterSpacing = 0.5.sp,
-            )
+        // ─── Header ─────────────────────────────────────────────────
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 2.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column {
+                Text(
+                    text = "PACEPILOT",
+                    color = Primary,
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 2.5.sp,
+                )
+                Text(
+                    text = "Intelligent cycling coach",
+                    color = TextSecondary,
+                    fontSize = 11.sp,
+                    letterSpacing = 0.3.sp,
+                )
+            }
+            // Status pill — green dot when active
+            Box(
+                modifier = Modifier
+                    .clip(PillShape)
+                    .background(if (settings.appEnabled) SuccessMuted else FieldBorder.copy(alpha = 0.4f))
+                    .padding(horizontal = 9.dp, vertical = 5.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(6.dp)
+                            .clip(RoundedCornerShape(50))
+                            .background(if (settings.appEnabled) Success else TextTertiary),
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = if (settings.appEnabled) "ACTIVE" else "OFF",
+                        color = if (settings.appEnabled) Success else TextTertiary,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 0.8.sp,
+                    )
+                }
+            }
         }
 
         if (latestInsight != null) {
@@ -167,28 +203,30 @@ fun PacePilotSettingsScreen(
                 .clip(CardShape)
                 .border(
                     width = 1.dp,
-                    color = if (settings.appEnabled) Primary.copy(alpha = 0.4f) else CardBorder,
+                    color = if (settings.appEnabled) Primary.copy(alpha = 0.45f) else CardBorder,
                     shape = CardShape,
                 )
-                .background(if (settings.appEnabled) PrimaryMuted else CardBg)
-                .padding(horizontal = 16.dp, vertical = 14.dp),
+                .background(if (settings.appEnabled) PrimaryGhost else CardBg)
+                .padding(horizontal = 14.dp, vertical = 12.dp),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        "PacePilot Active",
+                        "PacePilot",
                         color = if (settings.appEnabled) Primary else TextSecondary,
-                        fontSize = 15.sp,
+                        fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 0.2.sp,
                     )
                     Text(
-                        if (settings.appEnabled) "Coaching enabled on next ride" else "Extension dormant — no coaching",
+                        if (settings.appEnabled) "Coaching enabled on next ride"
+                        else "Dormant — no coaching",
                         color = TextTertiary,
-                        fontSize = 11.sp,
+                        fontSize = 10.sp,
                     )
                 }
                 Switch(
@@ -386,36 +424,46 @@ fun PacePilotSettingsScreen(
             )
         }
 
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(2.dp))
 
-        // Save button
-        Button(
-            onClick = {
-                try {
-                    onSave(settings)
-                    AnalyticsManager.updateOptOut()
-                    val status = if (settings.appEnabled) "ON" else "OFF"
-                    Toast.makeText(context, "Saved — PacePilot $status", Toast.LENGTH_SHORT).show()
-                } catch (e: Exception) {
-                    Toast.makeText(context, "Save failed: ${e.message}", Toast.LENGTH_LONG).show()
-                }
-            },
+        // Save button — premium with subtle gradient feel via dim border
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(48.dp),
-            shape = RoundedCornerShape(10.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Primary),
+                .clip(RoundedCornerShape(12.dp))
+                .background(
+                    Brush.verticalGradient(colors = listOf(Primary, PrimaryDim)),
+                )
+                .clickable {
+                    try {
+                        onSave(settings)
+                        AnalyticsManager.updateOptOut()
+                        val status = if (settings.appEnabled) "ON" else "OFF"
+                        Toast.makeText(context, "Saved — PacePilot $status", Toast.LENGTH_SHORT).show()
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "Save failed: ${e.message}", Toast.LENGTH_LONG).show()
+                    }
+                }
+                .padding(vertical = 14.dp),
+            contentAlignment = Alignment.Center,
         ) {
-            Text("SAVE", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.5.sp)
+            Text(
+                "SAVE SETTINGS",
+                color = Color.White,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.8.sp,
+            )
         }
 
         // Version tag
         Text(
-            text = "v1.3 · PacePilot",
+            text = "v1.3.1 · PacePilot",
             color = TextTertiary,
-            fontSize = 10.sp,
+            fontSize = 9.sp,
+            letterSpacing = 0.5.sp,
             textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 16.dp),
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 12.dp),
         )
     }
 }
@@ -435,16 +483,25 @@ private fun SettingsCard(
             .clip(CardShape)
             .border(1.dp, CardBorder, CardShape)
             .background(CardBg)
-            .padding(16.dp),
+            .padding(horizontal = 14.dp, vertical = 13.dp),
     ) {
-        Text(
-            text = title,
-            color = TextSecondary,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.SemiBold,
-            letterSpacing = 1.5.sp,
-            modifier = Modifier.padding(bottom = 12.dp),
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(width = 3.dp, height = 10.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(Primary),
+            )
+            Spacer(modifier = Modifier.width(7.dp))
+            Text(
+                text = title,
+                color = TextSecondary,
+                fontSize = 9.sp,
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 1.4.sp,
+            )
+        }
+        Spacer(modifier = Modifier.height(11.dp))
         content()
     }
 }
@@ -460,7 +517,7 @@ private fun ToggleRow(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(label, color = TextPrimary, fontSize = 14.sp)
+        Text(label, color = TextPrimary, fontSize = 13.sp)
         Switch(
             checked = checked,
             onCheckedChange = onToggle,
@@ -484,14 +541,15 @@ private fun InputField(
     onChange: (String) -> Unit,
 ) {
     Column {
-        Text(label, color = TextSecondary, fontSize = 12.sp)
+        Text(label, color = TextSecondary, fontSize = 11.sp)
         Spacer(modifier = Modifier.height(4.dp))
         OutlinedTextField(
             value = value,
             onValueChange = onChange,
-            placeholder = { Text(placeholder, color = TextTertiary, fontSize = 13.sp) },
+            placeholder = { Text(placeholder, color = TextTertiary, fontSize = 12.sp) },
             keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
             singleLine = true,
+            textStyle = TextStyle(fontSize = 13.sp),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedTextColor = TextPrimary,
                 unfocusedTextColor = TextPrimary,
@@ -514,22 +572,47 @@ private fun ApiKeyField(
     onChange: (String) -> Unit,
 ) {
     var visible by remember { mutableStateOf(false) }
+    val saved = value.isNotBlank()
     Column {
-        Text(label, color = TextSecondary, fontSize = 12.sp)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(label, color = TextSecondary, fontSize = 11.sp)
+            Spacer(modifier = Modifier.weight(1f))
+            if (saved) {
+                Box(
+                    modifier = Modifier
+                        .clip(PillShape)
+                        .background(SuccessMuted)
+                        .padding(horizontal = 7.dp, vertical = 2.dp),
+                ) {
+                    Text(
+                        "✓ ${value.takeLast(4)}",
+                        color = Success,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 0.3.sp,
+                    )
+                }
+            }
+        }
         Spacer(modifier = Modifier.height(4.dp))
         OutlinedTextField(
             value = value,
             onValueChange = onChange,
             enabled = enabled,
-            placeholder = { Text(placeholder, color = TextTertiary, fontSize = 13.sp) },
+            placeholder = { Text(placeholder, color = TextTertiary, fontSize = 12.sp) },
             singleLine = true,
+            textStyle = TextStyle(fontSize = 12.sp),
             visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
             trailingIcon = {
-                TextButton(onClick = { visible = !visible }, enabled = enabled) {
+                TextButton(
+                    onClick = { visible = !visible },
+                    enabled = enabled,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                ) {
                     Text(
                         if (visible) "HIDE" else "SHOW",
                         color = if (enabled) TextSecondary else TextTertiary,
-                        fontSize = 10.sp,
+                        fontSize = 9.sp,
                         letterSpacing = 0.5.sp,
                     )
                 }
