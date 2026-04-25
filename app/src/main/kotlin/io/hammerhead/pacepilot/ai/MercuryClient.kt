@@ -35,7 +35,13 @@ class MercuryClient(private val apiKey: String) : AiCoachingClient {
         private const val BASE_URL = "https://api.inceptionlabs.ai/v1"
         private const val CHAT_ENDPOINT = "$BASE_URL/chat/completions"
         private const val WARMUP_ENDPOINT = "$BASE_URL/models"
-        private const val MODEL = "mercury-coder-small"
+        // Mercury-2 is a reasoning model — it spends tokens internally before
+        // emitting visible output. We pin "reasoning_effort=low" + a generous
+        // max_tokens so a coaching cue actually surfaces. The legacy
+        // "mercury-coder-small" id was deprecated for new accounts on 2026-02-24.
+        private const val MODEL = "mercury-2"
+        private const val REASONING_EFFORT = "low"
+        private const val MAX_TOKENS = 100
         // Generate runs on the alert critical path (must beat 6–12s auto-dismiss).
         private const val TIMEOUT_GEN_SEC = 6L
         // initRide is off-path and is the first call after a hotspot connect — DNS+TLS can take 3–5s.
@@ -168,8 +174,9 @@ class MercuryClient(private val apiKey: String) : AiCoachingClient {
                         put("content", livePrompt)
                     })
                 })
-                put("max_tokens", 40)
+                put("max_tokens", MAX_TOKENS)
                 put("temperature", 0.75)
+                put("reasoning_effort", REASONING_EFFORT)
                 put("stop", buildJsonArray { add(JsonPrimitive("\n")) })
             }.toString()
 
@@ -201,11 +208,28 @@ class MercuryClient(private val apiKey: String) : AiCoachingClient {
                 ?.firstOrNull()?.jsonObject
                 ?.get("message")?.jsonObject
                 ?.get("content")?.jsonPrimitive?.content
-                ?.trim()
-                ?.take(100)
+                ?.let(::sanitiseCue)
         }.getOrElse {
             Timber.w(it, "MercuryClient: failed to parse response")
             null
         }
+    }
+
+    /**
+     * Mercury-2 sometimes wraps its reply in markdown bold or "**Cue:**" prefix
+     * and surrounds the actual cue with curly quotes. Karoo's InRideAlert
+     * doesn't render markdown, so strip leading labels, asterisks and quotes.
+     */
+    private fun sanitiseCue(raw: String): String {
+        var s = raw.trim()
+        // Drop leading label like "**Cue:**", "Cue:", "Coach:" etc.
+        s = s.replace(Regex("^\\**\\s*(cue|coach|tip|advice)\\s*[:\\-]\\s*\\**\\s*", RegexOption.IGNORE_CASE), "")
+        // Strip remaining markdown bold/italic markers.
+        s = s.replace(Regex("\\*+"), "")
+        // Trim wrapping quotes (straight or curly).
+        s = s.trim('"', '\'', '\u201C', '\u201D', '\u2018', '\u2019', ' ')
+        // Collapse multi-line replies into the first sentence/line.
+        s = s.lineSequence().firstOrNull { it.isNotBlank() }?.trim() ?: s
+        return s.take(100)
     }
 }

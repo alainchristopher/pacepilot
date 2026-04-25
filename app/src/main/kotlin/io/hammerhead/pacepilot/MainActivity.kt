@@ -471,7 +471,7 @@ fun PacePilotSettingsScreen(
 
         // Version tag
         Text(
-            text = "v1.3.3 · PacePilot",
+            text = "v1.3.4 · PacePilot",
             color = TextTertiary,
             fontSize = 9.sp,
             letterSpacing = 0.5.sp,
