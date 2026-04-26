@@ -100,7 +100,7 @@ Enable developer mode on Karoo first: **Settings → About → tap Build number 
 brew install android-platform-tools
 
 # Plug in via USB, allow debugging when Karoo prompts, then:
-adb install -r PacePilot-v1.3.0.apk
+adb install -r PacePilot-v1.3.5-debug.apk
 ```
 
 Windows: download [platform-tools](https://developer.android.com/tools/releases/platform-tools), unzip, run `adb install -r` from that folder.
@@ -110,7 +110,7 @@ Windows: download [platform-tools](https://developer.android.com/tools/releases/
 ```bash
 # Enable Wireless Debugging on Karoo (Developer options), note the IP shown
 adb connect <karoo-ip>:5555
-adb install -r PacePilot-v1.3.0.apk
+adb install -r PacePilot-v1.3.5-debug.apk
 ```
 
 #### Set API key via deep link (optional, ADB only)
