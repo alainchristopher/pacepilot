@@ -2,7 +2,8 @@ package io.hammerhead.pacepilot
 
 import io.hammerhead.pacepilot.coaching.*
 import io.hammerhead.pacepilot.model.*
-import io.hammerhead.pacepilot.util.ZoneCalculator
+import io.hammerhead.pacepilot.history.RacePlan
+import io.hammerhead.pacepilot.settings.UserSettings
 import org.junit.Test
 import kotlin.math.sin
 
@@ -19,17 +20,22 @@ class CoachingReplaySimulation {
     private val ftp = 250
     private val maxHr = 185
 
-    private fun gatherCandidates(ctx: RideContext): List<CoachingEvent> =
+    private fun gatherCandidates(ctx: RideContext, drinkMin: Int = 20): List<CoachingEvent> =
         when (ctx.currentMode) {
             RideMode.WORKOUT -> WorkoutCoachingRules.evaluateAll(ctx, 75)
-            RideMode.ENDURANCE -> EnduranceCoachingRules.evaluateAll(ctx) +
+            RideMode.ENDURANCE -> EnduranceCoachingRules.evaluateAll(ctx, drinkMin) +
                 if (ctx.isOnClimb) ClimbCoachingRules.evaluateAll(ctx) else emptyList()
             RideMode.CLIMB_FOCUSED -> ClimbCoachingRules.evaluateAll(ctx) +
                 listOfNotNull(
                     EnduranceCoachingRules.fuelTimeBasedReminder(ctx),
-                    EnduranceCoachingRules.drinkReminder(ctx, 20),
+                    EnduranceCoachingRules.drinkReminder(ctx, drinkMin),
                 )
-            RideMode.ADAPTIVE, RideMode.RECOVERY -> AdaptiveCoachingRules.evaluateAll(ctx)
+            RideMode.ADAPTIVE, RideMode.RECOVERY -> AdaptiveCoachingRules.evaluateAll(ctx, drinkMin)
+            RideMode.RACE -> RaceCoachingRules.evaluateAll(
+                ctx,
+                RacePlan(enabled = true, targetIf = 0.82f, durationMin = 150, distanceKm = 90f),
+                UserSettings(),
+            )
         }
 
     private fun formatTime(sec: Long): String {
@@ -105,6 +111,11 @@ class CoachingReplaySimulation {
                         lastFuelAckSec = clockOffset + ctx.rideElapsedSec
                         lastDrinkAckSec = clockOffset + ctx.rideElapsedSec
                     }
+                    RuleId.RACE_FUEL -> {
+                        carbsConsumed += DEFAULT_CARBS_PER_SERVING
+                        lastFuelAckSec = clockOffset + ctx.rideElapsedSec
+                    }
+                    RuleId.RACE_DRINK -> lastDrinkAckSec = clockOffset + ctx.rideElapsedSec
                 }
             }
 
@@ -1029,6 +1040,42 @@ class CoachingReplaySimulation {
             "REAL RIDE — March 21, 69km/633m, HR-only, no fueling logged",
             frames,
             tickIntervalSec = 1,  // 1 tick = 1 raw data point (10s intervals)
+        )
+    }
+
+    @Test
+    fun ironman703RaceLeg90km() {
+        val targetW = (ftp * 0.82f).toInt() // ~205W
+        val frames = (0 until 9000).map { sec ->
+            val distKm = sec * 36f / 3600f // ~36 km/h avg → 90km in 2.5h
+            val overTarget = sec in 3600..4200 // simulate surge mid-ride
+            val power = when {
+                overTarget -> targetW + 25
+                distKm < 40f -> targetW - 8
+                else -> targetW + 3
+            }
+            RideContext(
+                activeMode = ActiveMode(RideMode.RACE, ModeSource.MANUAL_OVERRIDE),
+                isRecording = true,
+                rideElapsedSec = sec.toLong(),
+                powerWatts = power,
+                power30sAvg = power,
+                normalizedPower = power,
+                variabilityIndex = if (overTarget) 1.08f else 1.02f,
+                ftp = ftp,
+                maxHr = maxHr,
+                distanceKm = distKm,
+                routeDistanceKm = 90f,
+                hasRoute = true,
+                carbTargetGrams = (sec / 3600f * 75).toInt(),
+                carbsConsumedGrams = 0,
+                carbDeficitGrams = (sec / 3600f * 75).toInt(),
+            )
+        }
+        runSimulation(
+            "70.3 RACE — 90km @ ${targetW}W target, negative split + surge",
+            frames,
+            tickIntervalSec = 30,
         )
     }
 }

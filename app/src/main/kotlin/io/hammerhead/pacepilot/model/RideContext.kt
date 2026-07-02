@@ -60,6 +60,8 @@ data class RideContext(
     val hasRoute: Boolean = false,
     val routeTotalElevationGainM: Float = 0f,
     val routeSteeplyGradedPct: Float = 0f,  // % of route above 4% grade
+    /** Total navigated route distance (km) when available */
+    val routeDistanceKm: Float = 0f,
 
     // Workout state
     val workout: WorkoutState = WorkoutState(),

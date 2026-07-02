@@ -29,14 +29,19 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.hammerhead.pacepilot.ai.CueBankGenerator
 import io.hammerhead.pacepilot.ai.LlmProvider
-import kotlinx.coroutines.launch
 import io.hammerhead.pacepilot.analytics.AnalyticsManager
+import io.hammerhead.pacepilot.history.CueBankRepository
 import io.hammerhead.pacepilot.history.PostRideInsight
 import io.hammerhead.pacepilot.history.PostRideInsightsRepository
+import io.hammerhead.pacepilot.history.RacePlan
+import io.hammerhead.pacepilot.history.RacePlanRepository
+import io.hammerhead.pacepilot.history.RideHistoryRepository
 import io.hammerhead.pacepilot.model.RideMode
 import io.hammerhead.pacepilot.settings.SettingsRepository
 import io.hammerhead.pacepilot.settings.UserSettings
+import kotlinx.coroutines.launch
 
 private val BG = Color(0xFF050505)
 private val CardBg = Color(0xFF111111)
@@ -59,21 +64,37 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var settingsRepo: SettingsRepository
     private lateinit var postRideInsightsRepo: PostRideInsightsRepository
+    private lateinit var historyRepo: RideHistoryRepository
+    private lateinit var cueBankRepo: CueBankRepository
+    private lateinit var racePlanRepo: RacePlanRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         settingsRepo = SettingsRepository(this)
         postRideInsightsRepo = PostRideInsightsRepository(this)
+        historyRepo = RideHistoryRepository(this)
+        cueBankRepo = CueBankRepository(this)
+        racePlanRepo = RacePlanRepository(this)
         AnalyticsManager.init(application, settingsRepo)
         handleDeepLink()
 
         setContent {
-            // Re-read from disk every recomposition trigger — picks up deep-link / CLI updates
             val currentSettings = remember(intent) { settingsRepo.current }
+            var racePlan by remember { mutableStateOf(RacePlan()) }
+            LaunchedEffect(Unit) {
+                historyRepo.load()
+                cueBankRepo.load()
+                racePlan = racePlanRepo.load()
+            }
             PacePilotSettingsScreen(
                 initial = currentSettings,
                 onSave = { settingsRepo.save(it) },
                 postRideInsightsRepo = postRideInsightsRepo,
+                historyRepo = historyRepo,
+                cueBankRepo = cueBankRepo,
+                racePlan = racePlan,
+                racePlanRepo = racePlanRepo,
+                onRacePlanChange = { racePlan = it },
             )
         }
     }
@@ -120,12 +141,21 @@ fun PacePilotSettingsScreen(
     initial: UserSettings,
     onSave: (UserSettings) -> Unit,
     postRideInsightsRepo: PostRideInsightsRepository,
+    historyRepo: RideHistoryRepository,
+    cueBankRepo: CueBankRepository,
+    racePlan: RacePlan,
+    racePlanRepo: RacePlanRepository,
+    onRacePlanChange: (RacePlan) -> Unit,
 ) {
     var settings by remember { mutableStateOf(initial) }
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val latestInsight by produceState<PostRideInsight?>(initialValue = null) {
         value = postRideInsightsRepo.load()
     }
+    var cueBankStatus by remember { mutableStateOf<String?>(null) }
+    var preparingCueBank by remember { mutableStateOf(false) }
+    var localRacePlan by remember(racePlan) { mutableStateOf(racePlan) }
 
     Column(
         modifier = Modifier
@@ -193,6 +223,13 @@ fun PacePilotSettingsScreen(
                 Spacer(modifier = Modifier.height(8.dp))
                 latestInsight!!.patterns.take(2).forEach { pattern ->
                     Text("• $pattern", color = TextSecondary, fontSize = 11.sp)
+                }
+                if (latestInsight!!.timeline.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Timeline", color = TextTertiary, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                    latestInsight!!.timeline.take(4).forEach { line ->
+                        Text("· $line", color = TextSecondary, fontSize = 10.sp, lineHeight = 13.sp)
+                    }
                 }
             }
         }
@@ -321,6 +358,75 @@ fun PacePilotSettingsScreen(
             }
         }
 
+        // --- Fueling Card ---
+        SettingsCard(title = "FUELING", alpha = sectionAlpha) {
+            InputField(
+                label = "Carb target (g/h)",
+                value = settings.carbTargetGramsPerHour.toString(),
+                placeholder = "60",
+                keyboardType = KeyboardType.Number,
+            ) { v ->
+                settings = settings.copy(carbTargetGramsPerHour = (v.toIntOrNull() ?: 60).coerceIn(30, 120))
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            InputField(
+                label = "Carbs per serving (g)",
+                value = settings.carbsPerFuelServing.toString(),
+                placeholder = "25",
+                keyboardType = KeyboardType.Number,
+            ) { v ->
+                settings = settings.copy(carbsPerFuelServing = (v.toIntOrNull() ?: 25).coerceIn(8, 60))
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            InputField(
+                label = "Fueling alert threshold (g)",
+                value = settings.fuelingAlertThresholdGrams.toString(),
+                placeholder = "10",
+                keyboardType = KeyboardType.Number,
+            ) { v ->
+                settings = settings.copy(fuelingAlertThresholdGrams = (v.toIntOrNull() ?: 10).coerceIn(5, 40))
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            InputField(
+                label = "Drink reminder (min)",
+                value = settings.drinkReminderMinutes.toString(),
+                placeholder = "20",
+                keyboardType = KeyboardType.Number,
+            ) { v ->
+                settings = settings.copy(drinkReminderMinutes = (v.toIntOrNull() ?: 20).coerceIn(10, 45))
+            }
+        }
+
+        // --- Advanced Card ---
+        SettingsCard(title = "ADVANCED", alpha = sectionAlpha) {
+            InputField(
+                label = "Climb route min gain (m)",
+                value = settings.climbRouteMinGainM.toInt().toString(),
+                placeholder = "1000",
+                keyboardType = KeyboardType.Number,
+            ) { v ->
+                settings = settings.copy(climbRouteMinGainM = (v.toIntOrNull() ?: 1000).toFloat().coerceIn(200f, 5000f))
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            InputField(
+                label = "Climb gradient threshold (%)",
+                value = settings.climbRouteGradientThresholdPct.toString(),
+                placeholder = "4",
+                keyboardType = KeyboardType.Decimal,
+            ) { v ->
+                settings = settings.copy(climbRouteGradientThresholdPct = (v.toFloatOrNull() ?: 4f).coerceIn(2f, 8f))
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            InputField(
+                label = "Min effort cadence (rpm)",
+                value = settings.minEffortCadenceRpm.toString(),
+                placeholder = "75",
+                keyboardType = KeyboardType.Number,
+            ) { v ->
+                settings = settings.copy(minEffortCadenceRpm = (v.toIntOrNull() ?: 75).coerceIn(50, 100))
+            }
+        }
+
         // --- AI Card ---
         SettingsCard(title = "AI COACHING", alpha = sectionAlpha) {
             Text("Provider", color = TextSecondary, fontSize = 12.sp)
@@ -389,6 +495,99 @@ fun PacePilotSettingsScreen(
                     )
                 }
             }
+            if (settings.llmProvider != LlmProvider.DISABLED) {
+                Spacer(modifier = Modifier.height(10.dp))
+                PrepareOfflineCoachButton(
+                    enabled = settings.appEnabled && !preparingCueBank,
+                    preparing = preparingCueBank,
+                    status = cueBankStatus,
+                    onPrepare = {
+                        preparingCueBank = true
+                        cueBankStatus = "Generating…"
+                        scope.launch {
+                            runCatching {
+                                val bank = CueBankGenerator(settings, historyRepo.current).generate()
+                                cueBankRepo.save(bank)
+                                cueBankStatus = "✓ ${bank.cueCount} cues ready (offline)"
+                            }.onFailure {
+                                cueBankStatus = "✗ ${it.message?.take(50) ?: "failed"}"
+                            }
+                            preparingCueBank = false
+                        }
+                    },
+                )
+            }
+        }
+
+        // --- Race Card ---
+        SettingsCard(title = "RACE — 70.3", alpha = sectionAlpha) {
+            ToggleRow("Race mode plan enabled", localRacePlan.enabled) {
+                localRacePlan = localRacePlan.copy(enabled = it)
+                onRacePlanChange(localRacePlan)
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            InputField(
+                label = "Event",
+                value = localRacePlan.eventName,
+                placeholder = "Ironman 70.3 Kraków",
+            ) { v -> localRacePlan = localRacePlan.copy(eventName = v); onRacePlanChange(localRacePlan) }
+            Spacer(modifier = Modifier.height(8.dp))
+            InputField(
+                label = "Target IF (0.80–0.85)",
+                value = localRacePlan.targetIf.toString(),
+                placeholder = "0.82",
+                keyboardType = KeyboardType.Decimal,
+            ) { v ->
+                localRacePlan = localRacePlan.copy(targetIf = (v.toFloatOrNull() ?: 0.82f).coerceIn(0.65f, 0.95f))
+                onRacePlanChange(localRacePlan)
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            InputField(
+                label = "Target watts (0 = IF×FTP)",
+                value = if (localRacePlan.targetWatts > 0) localRacePlan.targetWatts.toString() else "",
+                placeholder = "auto",
+                keyboardType = KeyboardType.Number,
+            ) { v ->
+                localRacePlan = localRacePlan.copy(targetWatts = v.toIntOrNull() ?: 0)
+                onRacePlanChange(localRacePlan)
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            InputField(
+                label = "Planned duration (min)",
+                value = localRacePlan.durationMin.toString(),
+                placeholder = "150",
+                keyboardType = KeyboardType.Number,
+            ) { v ->
+                localRacePlan = localRacePlan.copy(durationMin = (v.toIntOrNull() ?: 150).coerceIn(60, 360))
+                onRacePlanChange(localRacePlan)
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            InputField(
+                label = "Distance (km)",
+                value = localRacePlan.distanceKm.toString(),
+                placeholder = "90",
+                keyboardType = KeyboardType.Decimal,
+            ) { v ->
+                localRacePlan = localRacePlan.copy(distanceKm = (v.toFloatOrNull() ?: 90f).coerceIn(40f, 200f))
+                onRacePlanChange(localRacePlan)
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            InputField(
+                label = "Race carbs (g/h)",
+                value = localRacePlan.carbGramsPerHour.toString(),
+                placeholder = "75",
+                keyboardType = KeyboardType.Number,
+            ) { v ->
+                localRacePlan = localRacePlan.copy(carbGramsPerHour = (v.toIntOrNull() ?: 75).coerceIn(40, 120))
+                onRacePlanChange(localRacePlan)
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                "Set Ride Mode → Race before race day. Coaching status: 1=rules, 2=cue bank, 3=AI.",
+                color = TextTertiary,
+                fontSize = 10.sp,
+                lineHeight = 13.sp,
+            )
         }
 
         // --- Mode Card ---
@@ -450,6 +649,7 @@ fun PacePilotSettingsScreen(
                 .clickable {
                     try {
                         onSave(settings)
+                        scope.launch { racePlanRepo.save(localRacePlan) }
                         AnalyticsManager.updateOptOut()
                         val status = if (settings.appEnabled) "ON" else "OFF"
                         Toast.makeText(context, "Saved — PacePilot $status", Toast.LENGTH_SHORT).show()
@@ -471,7 +671,7 @@ fun PacePilotSettingsScreen(
 
         // Version tag
         Text(
-            text = "v1.3.5 · PacePilot",
+            text = "v2.0.0 · PacePilot",
             color = TextTertiary,
             fontSize = 9.sp,
             letterSpacing = 0.5.sp,
@@ -727,6 +927,7 @@ private fun ModeChips(
         RideMode.ENDURANCE to "Endure",
         RideMode.CLIMB_FOCUSED to "Climb",
         RideMode.ADAPTIVE to "Adapt",
+        RideMode.RACE to "Race",
         RideMode.RECOVERY to "Recover",
     )
 
@@ -893,6 +1094,39 @@ private fun TestConnectionButton(
                 fontSize = 11.sp,
                 lineHeight = 14.sp,
             )
+        }
+    }
+}
+
+@Composable
+private fun PrepareOfflineCoachButton(
+    enabled: Boolean,
+    preparing: Boolean,
+    status: String?,
+    onPrepare: () -> Unit,
+) {
+    Column {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .border(1.dp, if (enabled) Success.copy(alpha = 0.5f) else FieldBorder, RoundedCornerShape(8.dp))
+                .background(if (enabled) SuccessMuted else Color.Transparent)
+                .clickable(enabled = enabled && !preparing) { onPrepare() }
+                .padding(vertical = 10.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = if (preparing) "PREPARING…" else "PREPARE OFFLINE COACH",
+                color = if (enabled) Success else TextTertiary,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 1.0.sp,
+            )
+        }
+        status?.let {
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(it, color = if (it.startsWith("✓")) Success else TextSecondary, fontSize = 11.sp)
         }
     }
 }

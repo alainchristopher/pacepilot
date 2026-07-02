@@ -87,6 +87,7 @@ class CooldownManager(
             RideMode.ENDURANCE -> 120L
             RideMode.ADAPTIVE -> 120L
             RideMode.RECOVERY -> 180L
+            RideMode.RACE -> 90L
         }
         return (baseSec * cooldownMultiplier).toLong()
     }

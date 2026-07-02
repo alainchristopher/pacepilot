@@ -15,6 +15,9 @@ enum class RideMode {
 
     /** Inferred from sustained Z1 in adaptive mode */
     RECOVERY,
+
+    /** Race-day triathlon bike leg — steady power, run protection, race fueling */
+    RACE,
 }
 
 /** Why the current mode was set */

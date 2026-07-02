@@ -121,7 +121,7 @@ object AdaptiveCoachingRules {
         )
     }
 
-    fun evaluateAll(ctx: RideContext): List<CoachingEvent> {
+    fun evaluateAll(ctx: RideContext, drinkIntervalMin: Int = 20): List<CoachingEvent> {
         val base = listOfNotNull(
             adaptiveObserving(ctx),
             adaptiveEnduranceDetected(ctx),
@@ -131,9 +131,8 @@ object AdaptiveCoachingRules {
         )
 
         // After observation period in ADAPTIVE, delegate to endurance rules
-        // so the rider gets real coaching (zone drift, fueling, pacing, etc.)
         if (ctx.currentMode == RideMode.ADAPTIVE && ctx.rideElapsedSec > OBSERVATION_PERIOD_SEC) {
-            return base + EnduranceCoachingRules.evaluateAll(ctx)
+            return base + EnduranceCoachingRules.evaluateAll(ctx, drinkIntervalMin)
         }
         return base
     }

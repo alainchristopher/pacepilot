@@ -13,9 +13,11 @@ import io.hammerhead.pacepilot.detection.ModeDetector
 import io.hammerhead.pacepilot.detection.ModeTransitionEngine
 import io.hammerhead.pacepilot.fields.PacePilotNumericDataType
 import io.hammerhead.pacepilot.fit.CoachingFitExporter
-import io.hammerhead.pacepilot.history.RideHistoryRepository
+import io.hammerhead.pacepilot.history.CueBankRepository
 import io.hammerhead.pacepilot.history.PostRideInsightsRepository
 import io.hammerhead.pacepilot.history.PostRideIntelligence
+import io.hammerhead.pacepilot.history.RacePlanRepository
+import io.hammerhead.pacepilot.history.RideHistoryRepository
 import io.hammerhead.pacepilot.history.RideSummaryBuilder
 import io.hammerhead.pacepilot.model.ActiveMode
 import io.hammerhead.pacepilot.model.AlertStyle
@@ -37,21 +39,16 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 
-class PacePilotExtension : KarooExtension("pacepilot", "1.0") {
+class PacePilotExtension : KarooExtension("pacepilot", BuildConfig.VERSION_NAME) {
     override val types: List<DataTypeImpl> by lazy {
         listOf(
             PacePilotNumericDataType(extension, "coaching_status") {
-                val now = System.currentTimeMillis() / 1000
-                val ctx = telemetryAggregator.rideContext.value
-                when {
-                    !settingsRepo.current.appEnabled || !isRideActive -> 0.0
-                    ctx.silencedUntilSec > now -> 2.0
-                    else -> 1.0
-                }
+                coachingStatusValue()
             },
             PacePilotNumericDataType(extension, "zone_time_sec") {
                 val zone = telemetryAggregator.rideContext.value.powerZone
@@ -59,13 +56,33 @@ class PacePilotExtension : KarooExtension("pacepilot", "1.0") {
             },
             PacePilotNumericDataType(extension, "ride_score") {
                 rideScore().toDouble()
-            }
+            },
+            PacePilotNumericDataType(extension, "race_delta") {
+                val ctx = telemetryAggregator.rideContext.value
+                val plan = racePlanRepo.current()
+                if (ctx.currentMode != RideMode.RACE || !plan.enabled) 0.0
+                else io.hammerhead.pacepilot.coaching.RaceCoachingRules.racePowerDelta(ctx, plan).toDouble()
+            },
         )
+    }
+
+    private fun coachingStatusValue(): Double {
+        val now = System.currentTimeMillis() / 1000
+        val ctx = telemetryAggregator.rideContext.value
+        when {
+            !settingsRepo.current.appEnabled || !isRideActive -> return 0.0
+            ctx.silencedUntilSec > now -> return 9.0
+            coachingEngine.lastMessageSource == io.hammerhead.pacepilot.coaching.CoachingMessageSource.AI -> return 3.0
+            cueBankRepo.current()?.isReady == true -> return 2.0
+            else -> return 1.0
+        }
     }
 
     private lateinit var karooSystem: KarooSystemService
     private lateinit var settingsRepo: SettingsRepository
     private lateinit var historyRepo: RideHistoryRepository
+    private lateinit var cueBankRepo: CueBankRepository
+    private lateinit var racePlanRepo: RacePlanRepository
     private lateinit var postRideInsightsRepo: PostRideInsightsRepository
     private lateinit var activeRideStateStore: ActiveRideStateStore
     private val fitExporter = CoachingFitExporter()
@@ -110,10 +127,16 @@ class PacePilotExtension : KarooExtension("pacepilot", "1.0") {
         karooSystem = KarooSystemService(this)
         settingsRepo = SettingsRepository(this)
         historyRepo = RideHistoryRepository(this)
+        cueBankRepo = CueBankRepository(this)
+        racePlanRepo = RacePlanRepository(this)
         postRideInsightsRepo = PostRideInsightsRepository(this)
         activeRideStateStore = ActiveRideStateStore(this)
         AnalyticsManager.init(application, settingsRepo)
-        serviceScope.launch { historyRepo.load() }
+        serviceScope.launch {
+            historyRepo.load()
+            cueBankRepo.load()
+            racePlanRepo.load()
+        }
 
         // Wire components
         workoutDetector = WorkoutDetector(karooSystem, serviceScope)
@@ -142,6 +165,8 @@ class PacePilotExtension : KarooExtension("pacepilot", "1.0") {
             settingsRepo = settingsRepo,
             historyProvider = { historyRepo.current },
             scope = serviceScope,
+            cueBankProvider = { cueBankRepo.current() },
+            racePlanProvider = { racePlanRepo.current() },
             onEventDispatched = { event, message, aiUpgraded ->
                 val mode = telemetryAggregator.rideContext.value.currentMode
                 fitExporter.onCoachingEvent(event, message, mode, aiUpgraded)
@@ -161,16 +186,30 @@ class PacePilotExtension : KarooExtension("pacepilot", "1.0") {
                             Timber.d("PacePilot: Auto-ack drink on ${event.ruleId}")
                         }
                         RuleId.CLIMB_DESCENT -> {
-                            // Descent = recovery window — credit both eat + drink
                             val grams = settingsRepo.current.carbsPerFuelServing
                             telemetryAggregator.acknowledgedEat(grams)
                             telemetryAggregator.acknowledgedDrink()
                             Timber.d("PacePilot: Auto-ack eat+drink on descent")
                         }
+                        RuleId.RACE_FUEL -> {
+                            val grams = settingsRepo.current.carbsPerFuelServing
+                            telemetryAggregator.acknowledgedEat(grams)
+                            Timber.d("PacePilot: Auto-ack race fuel (${grams}g)")
+                        }
+                        RuleId.RACE_DRINK -> {
+                            telemetryAggregator.acknowledgedDrink()
+                            Timber.d("PacePilot: Auto-ack race drink")
+                        }
                     }
                 }
             },
         )
+
+        serviceScope.launch {
+            settingsRepo.settings.collectLatest {
+                if (::coachingEngine.isInitialized) coachingEngine.onSettingsChanged()
+            }
+        }
 
         karooSystem.connect {
             Timber.i("PacePilot: Karoo system connected")
@@ -411,6 +450,7 @@ class PacePilotExtension : KarooExtension("pacepilot", "1.0") {
             RideMode.ENDURANCE -> "Endurance. Coaching active."
             RideMode.ADAPTIVE -> "Observing. Coach starts ~10min."
             RideMode.RECOVERY -> "Recovery mode. Stay Z1."
+            RideMode.RACE -> "Race mode. Execute plan."
         }
         val detail = if (message.length > 30) message.take(28) + "…" else message
         karooSystem.dispatch(
@@ -437,6 +477,7 @@ class PacePilotExtension : KarooExtension("pacepilot", "1.0") {
             "mode_endurance" -> modeTransitionEngine.applyManualOverride(RideMode.ENDURANCE)
             "mode_climb" -> modeTransitionEngine.applyManualOverride(RideMode.CLIMB_FOCUSED)
             "mode_adaptive" -> modeTransitionEngine.applyManualOverride(RideMode.ADAPTIVE)
+            "mode_race" -> modeTransitionEngine.applyManualOverride(RideMode.RACE)
             "ack_fuel", "ack_eat" -> {
                 val grams = settingsRepo.current.carbsPerFuelServing
                 telemetryAggregator.acknowledgedEat(grams)

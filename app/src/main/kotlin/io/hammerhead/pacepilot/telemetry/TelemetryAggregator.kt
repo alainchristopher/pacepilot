@@ -321,6 +321,9 @@ class TelemetryAggregator(
                                             .toFloat() / dist * 100f
                                     else 0f
                                 }.getOrElse { 0f },
+                                routeDistanceKm = runCatching {
+                                    (nav.routeDistance / 1000.0).toFloat()
+                                }.getOrElse { 0f },
                             )
                         }
                     }

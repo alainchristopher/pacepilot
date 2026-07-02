@@ -89,9 +89,10 @@ class ModeDetectorTest {
     }
 
     @Test
-    fun `workout active takes priority over flat route`() {
-        val ctx = baseContext().copy(hasRoute = true)
-        val result = detector.detect(ctx, UserSettings(), workoutActive = true)
-        assertEquals(RideMode.WORKOUT, result.mode)
+    fun `forced race mode overrides detection`() {
+        val ctx = baseContext()
+        val settings = UserSettings(forcedMode = RideMode.RACE)
+        val result = detector.detect(ctx, settings, workoutActive = true)
+        assertEquals(RideMode.RACE, result.mode)
     }
 }

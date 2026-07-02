@@ -88,4 +88,15 @@ object RuleId {
     // Mode
     const val MODE_DETECTED = "mode_detected"
     const val MODE_OVERRIDE = "mode_override"
+
+    // Race
+    const val RACE_POWER_HIGH = "race_power_high"
+    const val RACE_POWER_LOW = "race_power_low"
+    const val RACE_VI_HIGH = "race_vi_high"
+    const val RACE_FUEL = "race_fuel"
+    const val RACE_DRINK = "race_drink"
+    const val RACE_FINISH_75 = "race_finish_75"
+    const val RACE_FINISH_90 = "race_finish_90"
+    const val RACE_NEGATIVE_SPLIT = "race_negative_split"
+    const val RACE_T2_PREP = "race_t2_prep"
 }

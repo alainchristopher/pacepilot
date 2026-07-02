@@ -110,6 +110,7 @@ class CoachingFitExporter {
         RideMode.CLIMB_FOCUSED -> 3
         RideMode.ADAPTIVE -> 4
         RideMode.RECOVERY -> 5
+        RideMode.RACE -> 6
     }
 }
 

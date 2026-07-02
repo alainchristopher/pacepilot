@@ -8,6 +8,7 @@
     <string name="action_mode_endurance">Mode: Endurance</string>
     <string name="action_mode_climb">Mode: Climb</string>
     <string name="action_mode_adaptive">Mode: Adaptive</string>
+    <string name="action_mode_race">Mode: Race</string>
     <string name="action_ack_eat">Ate ✓</string>
     <string name="action_ack_drink">Drank ✓</string>
     <string name="action_silence">Silence 10 min</string>
@@ -16,11 +17,13 @@
 
     <!-- Data field labels -->
     <string name="datatype_coaching_status_name">PacePilot Status</string>
-    <string name="datatype_coaching_status_desc">0=off, 1=active, 2=snoozed</string>
+    <string name="datatype_coaching_status_desc">0=off, 1=rules, 2=cue bank, 3=AI, 9=snoozed</string>
     <string name="datatype_zone_time_name">Zone Time (sec)</string>
     <string name="datatype_zone_time_desc">Seconds in current power zone</string>
     <string name="datatype_ride_score_name">Ride Score</string>
     <string name="datatype_ride_score_desc">Coaching compliance score 0-100</string>
+    <string name="datatype_race_delta_name">Race Delta (W)</string>
+    <string name="datatype_race_delta_desc">Watts above/below race target power</string>
 
     <!-- Settings labels -->
     <string name="settings_ftp_label">FTP (watts)</string>

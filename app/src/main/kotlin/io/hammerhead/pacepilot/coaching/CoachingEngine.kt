@@ -10,6 +10,7 @@ import io.hammerhead.pacepilot.ai.LlmProvider
 import io.hammerhead.pacepilot.ai.MercuryClient
 import io.hammerhead.pacepilot.ai.RideNarrative
 import io.hammerhead.pacepilot.analytics.AnalyticsManager
+import io.hammerhead.pacepilot.history.RacePlan
 import io.hammerhead.pacepilot.history.RideHistory
 import io.hammerhead.pacepilot.model.AlertStyle
 import io.hammerhead.pacepilot.model.CoachingEvent
@@ -63,11 +64,17 @@ class CoachingEngine(
     private val settingsRepo: SettingsRepository,
     private val historyProvider: () -> RideHistory,
     private val scope: CoroutineScope,
+    private val cueBankProvider: () -> io.hammerhead.pacepilot.history.CueBank?,
+    private val racePlanProvider: () -> RacePlan,
     private val onEventDispatched: ((CoachingEvent, String, Boolean) -> Unit)? = null,
 ) {
     private var tickJob: Job? = null
     private var narrativeJob: Job? = null
     private var cooldown: CooldownManager? = null
+    private val messageResolver = MessageResolver(cueBankProvider)
+
+    /** Last message source for data field / diagnostics */
+    val lastMessageSource: CoachingMessageSource get() = messageResolver.lastSource
 
     // AI layer — polymorphic; null means rules-only mode
     private var aiClient: AiCoachingClient? = null
@@ -161,6 +168,7 @@ class CoachingEngine(
 
     fun onSettingsChanged() {
         val settings = settingsRepo.current
+        cooldown = CooldownManager(settings.cooldownMultiplier)
         val needsClient = when (settings.llmProvider) {
             LlmProvider.GEMINI -> settings.geminiApiKey.isNotBlank()
             LlmProvider.MERCURY -> settings.mercuryApiKey.isNotBlank()
@@ -225,26 +233,25 @@ class CoachingEngine(
         recordAlert(nowSec)
         _alertsFired++
 
+        val offlineMessage = messageResolver.resolve(toFire, ctx)
         val client = aiClient
         if (client != null) {
-            // Show static message immediately — rider gets feedback in <1ms
-            dispatch(toFire, toFire.message, aiUpgraded = false)
+            dispatch(toFire, offlineMessage, aiUpgraded = false)
             AnalyticsManager.trackAlertShown(toFire.ruleId, aiUpgraded = false, latencyMs = 0)
 
-            // Upgrade async — when AI responds before auto-dismiss, rider sees smarter message
             val event = toFire
             val aiStartMs = System.currentTimeMillis()
             scope.launch {
                 val livePrompt = CoachingContextBuilder.buildLivePrompt(event, ctx, narrative)
-                val aiMessage = client.generate(livePrompt, event.message)
+                val aiMessage = client.generate(livePrompt, offlineMessage)
                 val latencyMs = System.currentTimeMillis() - aiStartMs
-                if (aiMessage != event.message) {
-                    Timber.d("CoachingEngine: AI upgraded \"${event.message}\" → \"$aiMessage\" (${latencyMs}ms)")
+                if (aiMessage.isNotBlank() && aiMessage != offlineMessage) {
+                    messageResolver.markAiSource()
+                    Timber.d("CoachingEngine: AI upgraded \"$offlineMessage\" → \"$aiMessage\" (${latencyMs}ms)")
                     _aiUpgrades++
                     dispatch(event, aiMessage, aiUpgraded = true)
                     AnalyticsManager.trackAlertShown(event.ruleId, aiUpgraded = true, latencyMs = latencyMs)
                 } else {
-                    // AI returned fallback (network issue or same message)
                     _aiFailures++
                     Timber.d("CoachingEngine: AI fallback for ${event.ruleId} (${latencyMs}ms)")
                     AnalyticsManager.trackAiCallFailed(
@@ -255,27 +262,30 @@ class CoachingEngine(
                 }
             }
         } else {
-            dispatch(toFire, toFire.message, aiUpgraded = false)
+            dispatch(toFire, offlineMessage, aiUpgraded = false)
             AnalyticsManager.trackAlertShown(toFire.ruleId, aiUpgraded = false, latencyMs = 0)
         }
     }
 
-    private fun gatherCandidates(ctx: RideContext, settings: UserSettings): List<CoachingEvent> =
-        when (ctx.currentMode) {
+    private fun gatherCandidates(ctx: RideContext, settings: UserSettings): List<CoachingEvent> {
+        val drinkMin = settings.drinkReminderMinutes
+        return when (ctx.currentMode) {
             RideMode.WORKOUT -> WorkoutCoachingRules.evaluateAll(
                 ctx = ctx,
                 settingsMinCadence = settings.minEffortCadenceRpm,
                 fuelingThresholdGrams = settings.fuelingAlertThresholdGrams,
             )
-            RideMode.ENDURANCE -> EnduranceCoachingRules.evaluateAll(ctx) +
+            RideMode.ENDURANCE -> EnduranceCoachingRules.evaluateAll(ctx, drinkMin) +
                 if (ctx.isOnClimb) ClimbCoachingRules.evaluateAll(ctx) else emptyList()
             RideMode.CLIMB_FOCUSED -> ClimbCoachingRules.evaluateAll(ctx) +
                 listOfNotNull(
                     EnduranceCoachingRules.fuelTimeBasedReminder(ctx),
-                    EnduranceCoachingRules.drinkReminder(ctx, settings.drinkReminderMinutes),
+                    EnduranceCoachingRules.drinkReminder(ctx, drinkMin),
                 )
-            RideMode.ADAPTIVE, RideMode.RECOVERY -> AdaptiveCoachingRules.evaluateAll(ctx)
+            RideMode.ADAPTIVE, RideMode.RECOVERY -> AdaptiveCoachingRules.evaluateAll(ctx, drinkMin)
+            RideMode.RACE -> RaceCoachingRules.evaluateAll(ctx, racePlanProvider(), settings)
         }
+    }
 
     private fun dispatch(event: CoachingEvent, message: String, aiUpgraded: Boolean) {
         // Karoo screen truncates around 30 chars on the narrow display

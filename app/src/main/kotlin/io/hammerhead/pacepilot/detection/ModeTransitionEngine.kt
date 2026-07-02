@@ -63,6 +63,7 @@ class ModeTransitionEngine(
             RideMode.ADAPTIVE -> evaluateAdaptive(ctx, current)
             RideMode.CLIMB_FOCUSED -> evaluateClimbFocused(ctx, current)
             RideMode.RECOVERY -> {} // no auto-transition out of recovery
+            RideMode.RACE -> {} // race plan locked for the leg
         }
     }
 
