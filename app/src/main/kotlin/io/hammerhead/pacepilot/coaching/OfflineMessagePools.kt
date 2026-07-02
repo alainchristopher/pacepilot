@@ -49,6 +49,7 @@ object OfflineMessagePools {
             "Settle in. Find your rhythm.",
             "Early miles. Stay relaxed.",
             "Easy start. Build gradually.",
+            "First miles. Lock in Z2.",
         ),
         RuleId.CLIMB_POWER_CEILING to listOf(
             "Climb ceiling. Back off power.",
@@ -142,6 +143,124 @@ object OfflineMessagePools {
             "T2 soon. Stop fueling hard.",
             "Final 20min. Light on gut.",
             "Run prep. Ease fuel load.",
+        ),
+        // Workout mode
+        RuleId.PRE_INTERVAL_ALERT to listOf(
+            "Effort coming. Get ready.",
+            "Hard block soon. Prepare.",
+            "Interval ahead. Settle in.",
+        ),
+        RuleId.PRE_INTERVAL_FUELING to listOf(
+            "Fuel now. Effort coming.",
+            "Eat before the block.",
+            "Gel time. Hard effort next.",
+        ),
+        RuleId.FIRST_INTERVAL to listOf(
+            "First block. Don't overcook.",
+            "Interval one. Find rhythm.",
+            "Settle in. Hold target.",
+        ),
+        RuleId.POWER_ON_TARGET to listOf(
+            "Good. Hold.",
+            "On target. Stay locked.",
+            "Perfect watts. Keep it.",
+        ),
+        RuleId.INTERVAL_COUNTDOWN to listOf(
+            "30 sec left. Hold.",
+            "Final push. Stay strong.",
+            "Almost done. Commit.",
+        ),
+        RuleId.CADENCE_DROPPING to listOf(
+            "Spin lighter. Cadence up.",
+            "Legs heavy. Lift cadence.",
+            "Cadence drop. Spin faster.",
+        ),
+        RuleId.HR_CEILING_EXCEEDED to listOf(
+            "HR too high. Back off.",
+            "Over ceiling. Ease power.",
+            "Heart rate hot. Soften.",
+        ),
+        RuleId.HR_BELOW_TARGET to listOf(
+            "HR low. Push a touch.",
+            "Below HR target. Lift.",
+            "More effort needed.",
+        ),
+        RuleId.HR_ON_TARGET to listOf(
+            "HR on target. Hold.",
+            "Good HR. Stay steady.",
+            "Heart rate locked.",
+        ),
+        RuleId.RECOVERY_FUELING_WINDOW to listOf(
+            "Recovery window. Eat now.",
+            "Fuel between efforts.",
+            "Good time for a gel.",
+        ),
+        RuleId.LAST_INTERVAL_MOTIVATION to listOf(
+            "Final block. You have this.",
+            "Last rep. Empty the tank.",
+            "Finish strong. One more.",
+        ),
+        RuleId.POWER_FADING_TREND to listOf(
+            "Power fading. Consider stopping.",
+            "Output dropping. Protect form.",
+            "Fatigue showing. Ease off.",
+        ),
+        RuleId.RECOVERY_QUALITY_DECLINING to listOf(
+            "Recovery slowing. Cut reps.",
+            "Not recovering well. Adjust.",
+            "HR not dropping. Stop soon.",
+        ),
+        RuleId.HR_NOT_DROPPING to listOf(
+            "HR still high. Spin easy.",
+            "Not recovering. Ease off.",
+            "Heart rate stuck. Soften.",
+        ),
+        RuleId.RECOVERING_WELL to listOf(
+            "Recovering well. Nice.",
+            "Good recovery. Ready soon.",
+            "HR dropping. Well done.",
+        ),
+        // Climb mode
+        RuleId.CLIMB_BUDGET to listOf(
+            "Climb budget. Pace it.",
+            "Save matches for summit.",
+            "Climb effort. Stay measured.",
+        ),
+        RuleId.CLIMB_CADENCE_DROP to listOf(
+            "Cadence drop on climb. Spin.",
+            "Grinding. Lift cadence.",
+            "Climb cadence low. Spin up.",
+        ),
+        RuleId.CLIMB_SUMMIT_NEAR to listOf(
+            "Summit near. Hold steady.",
+            "Top coming. Stay smooth.",
+            "Almost over. Push through.",
+        ),
+        RuleId.CLIMB_DESCENT to listOf(
+            "Descent. Eat and drink.",
+            "Downhill. Refuel now.",
+            "Recovery descent. Fuel up.",
+        ),
+        RuleId.MULTI_CLIMB_FATIGUE to listOf(
+            "Multiple climbs. Conserve.",
+            "Climb fatigue. Ease power.",
+            "Another climb. Stay patient.",
+        ),
+        // Adaptive info
+        RuleId.ADAPTIVE_OBSERVING to listOf(
+            "Reading ride. Coach starting.",
+            "Observing. Coach soon.",
+            "Learning your ride.",
+        ),
+        RuleId.ADAPTIVE_ENDURANCE to listOf(
+            "Endurance ride. Coaching on.",
+            "Steady day. Coach active.",
+            "Endurance mode. Stay Z2.",
+        ),
+        RuleId.ADAPTIVE_UNSTRUCTURED to listOf(
+            "Free ride. Fuel coach on.",
+            "Mixed ride. Fuel reminders on.",
+            "Unstructured. Fueling active.",
         ),
     )
 

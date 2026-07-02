@@ -47,7 +47,7 @@ object EnduranceCoachingRules {
      * Carb-deficit-aware fueling reminder.
      * Fires when carb deficit exceeds threshold, or time-based fallback every 30-45 min.
      */
-    fun fuelTimeBasedReminder(ctx: RideContext): CoachingEvent? {
+    fun fuelTimeBasedReminder(ctx: RideContext, drinkIntervalMin: Int = 20): CoachingEvent? {
         if (ctx.rideElapsedSec < 1800) return null // min 30 min before first prompt
 
         val sinceLastEat = if (ctx.lastFuelAckEpochSec > 0)
@@ -57,7 +57,7 @@ object EnduranceCoachingRules {
         val drinkDue = run {
             val sinceLastDrink = if (ctx.lastDrinkAckEpochSec > 0)
                 System.currentTimeMillis() / 1000 - ctx.lastDrinkAckEpochSec else ctx.rideElapsedSec
-            sinceLastDrink >= 20 * 60
+            sinceLastDrink >= drinkIntervalMin * 60L
         }
         val drinkSuffix = if (drinkDue) " Sip too." else ""
 
@@ -198,7 +198,7 @@ object EnduranceCoachingRules {
         listOfNotNull(
             earlyRideCheck(ctx),
             zoneDrift(ctx),
-            fuelTimeBasedReminder(ctx),
+            fuelTimeBasedReminder(ctx, drinkIntervalMin),
             drinkReminder(ctx, drinkIntervalMin),
             hrDecoupling(ctx),
             protectLastHour(ctx),

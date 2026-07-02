@@ -134,6 +134,13 @@ object AdaptiveCoachingRules {
         if (ctx.currentMode == RideMode.ADAPTIVE && ctx.rideElapsedSec > OBSERVATION_PERIOD_SEC) {
             return base + EnduranceCoachingRules.evaluateAll(ctx, drinkIntervalMin)
         }
+        // Recovery rides still need fuel/drink cadence
+        if (ctx.currentMode == RideMode.RECOVERY) {
+            return base + listOfNotNull(
+                EnduranceCoachingRules.fuelTimeBasedReminder(ctx, drinkIntervalMin),
+                EnduranceCoachingRules.drinkReminder(ctx, drinkIntervalMin),
+            )
+        }
         return base
     }
 }

@@ -279,7 +279,7 @@ class CoachingEngine(
                 if (ctx.isOnClimb) ClimbCoachingRules.evaluateAll(ctx) else emptyList()
             RideMode.CLIMB_FOCUSED -> ClimbCoachingRules.evaluateAll(ctx) +
                 listOfNotNull(
-                    EnduranceCoachingRules.fuelTimeBasedReminder(ctx),
+                    EnduranceCoachingRules.fuelTimeBasedReminder(ctx, drinkMin),
                     EnduranceCoachingRules.drinkReminder(ctx, drinkMin),
                 )
             RideMode.ADAPTIVE, RideMode.RECOVERY -> AdaptiveCoachingRules.evaluateAll(ctx, drinkMin)

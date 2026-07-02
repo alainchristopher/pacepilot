@@ -42,6 +42,8 @@ class RideMetrics:
     if_pct: float
     tss: float
     hr_decoupling_pct: float
+    power_zone_time_pct: list[float]
+    hr_zone_time_pct: list[float]
 
 
 def rolling_avg(values: list[float], window: int) -> list[float]:
@@ -53,6 +55,50 @@ def rolling_avg(values: list[float], window: int) -> list[float]:
         chunk = values[start : i + 1]
         out.append(sum(chunk) / len(chunk))
     return out
+
+
+def power_zone(power: float, ftp: int) -> int:
+    if ftp <= 0 or power <= 0:
+        return 0
+    pct = power / ftp * 100
+    return (
+        1 if pct < 55 else
+        2 if pct < 75 else
+        3 if pct < 90 else
+        4 if pct < 105 else
+        5 if pct < 120 else
+        6 if pct < 150 else
+        7
+    )
+
+
+def hr_zone(hr: float, max_hr: int) -> int:
+    if max_hr <= 0 or hr <= 0:
+        return 0
+    pct = hr / max_hr * 100
+    return (
+        1 if pct < 60 else
+        2 if pct < 70 else
+        3 if pct < 80 else
+        4 if pct < 90 else
+        5
+    )
+
+
+def zone_distribution(powers: list[float], hrs: list[float], ftp: int, max_hr: int) -> tuple[list[float], list[float]]:
+    p_counts = [0.0] * 7
+    h_counts = [0.0] * 5
+    for p in powers:
+        z = power_zone(p, ftp)
+        if z > 0:
+            p_counts[z - 1] += 1
+    for h in hrs:
+        z = hr_zone(h, max_hr)
+        if z > 0:
+            h_counts[z - 1] += 1
+    p_total = sum(p_counts) or 1.0
+    h_total = sum(h_counts) or 1.0
+    return [round(c / p_total * 100, 1) for c in p_counts], [round(c / h_total * 100, 1) for c in h_counts]
 
 
 def parse_fit(path: Path, ftp: int = 250) -> RideMetrics | None:
@@ -110,6 +156,9 @@ def parse_fit(path: Path, ftp: int = 250) -> RideMetrics | None:
         if first_p > 0 and last_p > 0:
             decoupling = ((last_hr / last_p) - (first_hr / first_p)) / (first_hr / first_p) * 100
 
+    max_hr_val = int(max(hrs)) if hrs else 0
+    p_zones, h_zones = zone_distribution(powers, hrs, ftp, max_hr_val or 185)
+
     return RideMetrics(
         file=path.name,
         timestamp_ms=int(start_ts.replace(tzinfo=timezone.utc).timestamp() * 1000),
@@ -124,6 +173,8 @@ def parse_fit(path: Path, ftp: int = 250) -> RideMetrics | None:
         if_pct=round(if_pct, 3),
         tss=round(tss, 1),
         hr_decoupling_pct=round(decoupling, 1),
+        power_zone_time_pct=p_zones,
+        hr_zone_time_pct=h_zones,
     )
 
 
@@ -176,8 +227,8 @@ def to_ride_summary(r: RideMetrics, ftp: int) -> dict:
         "ftpAtTime": ftp,
         "avgHrBpm": r.avg_hr,
         "maxHrBpm": r.max_hr,
-        "powerZoneTimePct": [0.0] * 7,
-        "hrZoneTimePct": [0.0] * 5,
+        "powerZoneTimePct": r.power_zone_time_pct,
+        "hrZoneTimePct": r.hr_zone_time_pct,
         "powerFadingDetected": False,
         "hrDecouplingPct": r.hr_decoupling_pct,
         "avgHrRecoveryRateBpmPerSec": 0.0,
@@ -247,6 +298,7 @@ def main() -> int:
     p.add_argument("--ftp", type=int, default=0, help="Override FTP (0 = estimate)")
     p.add_argument("--output", type=str, default="docs/fitness_report.md")
     p.add_argument("--history-json", type=str, default="tools/ride_history_seed.json")
+    p.add_argument("--race-plan-json", type=str, default="tools/race_plan_seed.json")
     args = p.parse_args()
 
     fits = collect_fits(args)
@@ -271,6 +323,25 @@ def main() -> int:
     hist_path.parent.mkdir(parents=True, exist_ok=True)
     hist_path.write_text(json.dumps(history, indent=2))
     print(f"Wrote {hist_path} ({len(recent)} rides)")
+
+    if recent:
+        race_if = min(0.85, max(0.78, (sum(r.normalized_power for r in recent) / len(recent) / ftp) * 0.92 if ftp else 0.82))
+        race_watts = int(ftp * race_if)
+        carb_gph = 75 if race_if >= 0.82 else 65
+        race_plan = {
+            "enabled": True,
+            "targetIf": round(race_if, 2),
+            "targetWatts": race_watts,
+            "durationMin": 150,
+            "distanceKm": 90.0,
+            "carbGramsPerHour": carb_gph,
+            "eventName": "Ironman 70.3 Kraków",
+            "courseNotes": "Generated from recent ride analysis",
+        }
+        race_path = Path(args.race_plan_json)
+        race_path.parent.mkdir(parents=True, exist_ok=True)
+        race_path.write_text(json.dumps(race_plan, indent=2))
+        print(f"Wrote {race_path}")
     return 0
 
 

@@ -174,11 +174,15 @@ object RaceCoachingRules {
         return plan.distanceKm
     }
 
-    /** Signed watts vs race plan for data field */
+    /** Signed watts vs race plan for data field — matches run-protection (NP when available). */
     fun racePowerDelta(ctx: RideContext, plan: RacePlan): Int {
         val target = plan.resolveTargetWatts(ctx.ftp)
         if (target <= 0) return 0
-        val avg = if (ctx.power30sAvg > 0) ctx.power30sAvg else ctx.powerWatts
+        val avg = when {
+            ctx.normalizedPower > 0 -> ctx.normalizedPower
+            ctx.power30sAvg > 0 -> ctx.power30sAvg
+            else -> ctx.powerWatts
+        }
         return avg - target
     }
 }

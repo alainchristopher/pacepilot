@@ -188,7 +188,7 @@ app/src/main/kotlin/io/hammerhead/pacepilot/
 ├── ai/                    # Gemini/Mercury clients, context builder, ride narrative
 ├── coaching/              # Rules engine (workout, endurance, climb, adaptive)
 ├── detection/             # Ride mode detection and transitions
-├── fields/                # Custom data fields (coaching_status, zone_time, ride_score)
+├── fields/                # Custom data fields (coaching_status, zone_time, ride_score, race_delta)
 ├── fit/                   # FIT developer-field export for coaching events
 ├── history/               # 30-ride history, PostRideIntelligence, RideSummaryBuilder
 ├── integrations/          # NomRide, 7Climb, Headwind adapters

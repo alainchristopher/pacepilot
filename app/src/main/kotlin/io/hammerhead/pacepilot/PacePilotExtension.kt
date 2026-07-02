@@ -1,5 +1,6 @@
 package io.hammerhead.pacepilot
 
+import android.content.SharedPreferences
 import io.hammerhead.karooext.KarooSystemService
 import io.hammerhead.karooext.extension.DataTypeImpl
 import io.hammerhead.karooext.extension.KarooExtension
@@ -73,8 +74,8 @@ class PacePilotExtension : KarooExtension("pacepilot", BuildConfig.VERSION_NAME)
             !settingsRepo.current.appEnabled || !isRideActive -> return 0.0
             ctx.silencedUntilSec > now -> return 9.0
             coachingEngine.lastMessageSource == io.hammerhead.pacepilot.coaching.CoachingMessageSource.AI -> return 3.0
-            cueBankRepo.current()?.isReady == true -> return 2.0
-            else -> return 1.0
+            coachingEngine.lastMessageSource == io.hammerhead.pacepilot.coaching.CoachingMessageSource.CUE_BANK -> return 2.0
+            else -> return 1.0 // RULES (pool or default)
         }
     }
 
@@ -109,6 +110,11 @@ class PacePilotExtension : KarooExtension("pacepilot", BuildConfig.VERSION_NAME)
     private var stateSnapshotJob: Job? = null
     private var isRideActive = false
 
+    private val settingsChangeListener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
+        if (::settingsRepo.isInitialized) settingsRepo.refreshFromDisk()
+        if (::coachingEngine.isInitialized) coachingEngine.onSettingsChanged()
+    }
+
     private fun rideScore(): Int {
         val ctx = telemetryAggregator.rideContext.value
         val base = if (ctx.workout.isActive) {
@@ -126,6 +132,7 @@ class PacePilotExtension : KarooExtension("pacepilot", BuildConfig.VERSION_NAME)
 
         karooSystem = KarooSystemService(this)
         settingsRepo = SettingsRepository(this)
+        settingsRepo.registerChangeListener(settingsChangeListener)
         historyRepo = RideHistoryRepository(this)
         cueBankRepo = CueBankRepository(this)
         racePlanRepo = RacePlanRepository(this)
@@ -149,6 +156,7 @@ class PacePilotExtension : KarooExtension("pacepilot", BuildConfig.VERSION_NAME)
             workoutTracker = workoutTracker,
             settingsRepo = settingsRepo,
             scope = serviceScope,
+            racePlanProvider = { racePlanRepo.current() },
         )
 
         modeDetector = ModeDetector(workoutDetector)
@@ -219,6 +227,9 @@ class PacePilotExtension : KarooExtension("pacepilot", BuildConfig.VERSION_NAME)
 
     override fun onDestroy() {
         Timber.i("PacePilot: onDestroy")
+        if (::settingsRepo.isInitialized) {
+            settingsRepo.unregisterChangeListener(settingsChangeListener)
+        }
         if (isRideActive) stopRide()
         rideStateJob?.cancel()
         serviceScope.cancel()

@@ -56,6 +56,7 @@ private val TextSecondary = PacePilotTheme.TextSecondary
 private val TextTertiary = PacePilotTheme.TextTertiary
 private val Success = PacePilotTheme.Success
 private val SuccessMuted = PacePilotTheme.SuccessMuted
+private val Error = PacePilotTheme.Error
 private val FieldBorder = PacePilotTheme.FieldBorder
 private val FieldBorderFocused = PacePilotTheme.FieldBorderFocused
 private val CardShape = PacePilotTheme.CardShape
@@ -1090,7 +1091,7 @@ private fun TestConnectionButton(
                 color = when {
                     it.startsWith("✓") -> Success
                     it.startsWith("Testing") -> TextSecondary
-                    else -> Color(0xFFFF5252)
+                    else -> Error
                 },
                 fontSize = 11.sp,
                 lineHeight = 14.sp,

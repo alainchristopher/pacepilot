@@ -8,8 +8,10 @@ import io.hammerhead.karooext.models.StreamState
 import io.hammerhead.karooext.models.UserProfile
 import io.hammerhead.pacepilot.model.ActiveMode
 import io.hammerhead.pacepilot.model.IntervalPhase
-import io.hammerhead.pacepilot.model.RideContext
+import io.hammerhead.pacepilot.model.RideMode
+import io.hammerhead.pacepilot.model.currentMode
 import io.hammerhead.pacepilot.coaching.FuelingIntelligence
+import io.hammerhead.pacepilot.history.RacePlan
 import io.hammerhead.pacepilot.integrations.NomRideAdapter
 import io.hammerhead.pacepilot.integrations.NomRideSignal
 import io.hammerhead.pacepilot.integrations.SevenClimbAdapter
@@ -41,6 +43,7 @@ class TelemetryAggregator(
     private val workoutTracker: WorkoutTracker,
     private val settingsRepo: SettingsRepository,
     private val scope: CoroutineScope,
+    private val racePlanProvider: () -> RacePlan = { RacePlan() },
 ) {
     private val _context = MutableStateFlow(RideContext())
     val rideContext: StateFlow<RideContext> = _context.asStateFlow()
@@ -335,6 +338,9 @@ class TelemetryAggregator(
                                 routeTotalElevationGainM = runCatching {
                                     nav.climbs.sumOf { it.totalElevation }.toFloat()
                                 }.getOrElse { 0f },
+                                routeDistanceKm = runCatching {
+                                    (nav.routeDistance / 1000.0).toFloat()
+                                }.getOrElse { c.routeDistanceKm },
                             )
                         }
                     }
@@ -435,7 +441,14 @@ class TelemetryAggregator(
                 (current.minutesInZ1Sustained + (1f / 60f)).coerceAtMost(30f)
             } else 0f
 
-            val baseRate = settingsRepo.current.carbTargetGramsPerHour
+            val baseRate = when {
+                current.currentMode == RideMode.RACE -> {
+                    val plan = racePlanProvider()
+                    if (plan.enabled && plan.carbGramsPerHour > 0) plan.carbGramsPerHour
+                    else settingsRepo.current.carbTargetGramsPerHour
+                }
+                else -> settingsRepo.current.carbTargetGramsPerHour
+            }
             val carbRate = FuelingIntelligence.recommendedCarbsPerHour(current, baseRate)
 
             // Compute target carbs based on elapsed time and dynamic demand.

@@ -4,6 +4,7 @@ import io.hammerhead.pacepilot.coaching.*
 import io.hammerhead.pacepilot.model.*
 import io.hammerhead.pacepilot.history.RacePlan
 import io.hammerhead.pacepilot.settings.UserSettings
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.math.sin
 
@@ -27,7 +28,7 @@ class CoachingReplaySimulation {
                 if (ctx.isOnClimb) ClimbCoachingRules.evaluateAll(ctx) else emptyList()
             RideMode.CLIMB_FOCUSED -> ClimbCoachingRules.evaluateAll(ctx) +
                 listOfNotNull(
-                    EnduranceCoachingRules.fuelTimeBasedReminder(ctx),
+                    EnduranceCoachingRules.fuelTimeBasedReminder(ctx, drinkMin),
                     EnduranceCoachingRules.drinkReminder(ctx, drinkMin),
                 )
             RideMode.ADAPTIVE, RideMode.RECOVERY -> AdaptiveCoachingRules.evaluateAll(ctx, drinkMin)
@@ -50,8 +51,8 @@ class CoachingReplaySimulation {
         frames: List<RideContext>,
         tickIntervalSec: Int = 10,
         cooldownMultiplier: Float = 1f,
-        autoAckFuel: Boolean = true, // NEW: simulate auto-acknowledge
-    ) {
+        autoAckFuel: Boolean = true,
+    ): List<Triple<Long, CoachingEvent, String>> {
         val clockOffset = 100_000L // offset so per-rule suppression doesn't false-positive at t=0
         var simTimeSec = clockOffset
         val cooldown = CooldownManager(cooldownMultiplier) { simTimeSec }
@@ -151,6 +152,7 @@ class CoachingReplaySimulation {
             println("  Total carbs consumed (auto-ack): ${carbsConsumed}g")
         }
         println("─".repeat(72))
+        return alerts
     }
 
     // ─── Scenario 1: Saturday 2h endurance ride ──────────────────────────
@@ -1051,7 +1053,7 @@ class CoachingReplaySimulation {
             val overTarget = sec in 3600..4200 // simulate surge mid-ride
             val power = when {
                 overTarget -> targetW + 25
-                distKm < 40f -> targetW - 8
+                distKm < 40f -> targetW + 12 // above opening target → negative split cue
                 else -> targetW + 3
             }
             RideContext(
@@ -1072,10 +1074,17 @@ class CoachingReplaySimulation {
                 carbDeficitGrams = (sec / 3600f * 75).toInt(),
             )
         }
-        runSimulation(
+        val alerts = runSimulation(
             "70.3 RACE — 90km @ ${targetW}W target, negative split + surge",
             frames,
             tickIntervalSec = 30,
         )
+
+        val ruleIds = alerts.map { it.second.ruleId }.toSet()
+        assertTrue("Expected negative-split cue in opening 40km, got: $ruleIds", ruleIds.contains(RuleId.RACE_NEGATIVE_SPLIT))
+        assertTrue("Expected run-protection cue during surge, got: $ruleIds", ruleIds.contains(RuleId.RACE_POWER_HIGH))
+        assertTrue("Expected VI watchdog during surge, got: $ruleIds", ruleIds.contains(RuleId.RACE_VI_HIGH))
+        assertTrue("Expected 75% finish cue, got: $ruleIds", ruleIds.contains(RuleId.RACE_FINISH_75))
+        assertTrue("Expected 90% finish cue, got: $ruleIds", ruleIds.contains(RuleId.RACE_FINISH_90))
     }
 }

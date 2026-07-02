@@ -51,7 +51,7 @@
         displayName="@string/action_ack_eat" />
     <BonusAction
         actionId="ack_fuel"
-        displayName="@string/action_ack_eat" />
+        displayName="@string/action_ack_fuel" />
     <BonusAction
         actionId="ack_drink"
         displayName="@string/action_ack_drink" />

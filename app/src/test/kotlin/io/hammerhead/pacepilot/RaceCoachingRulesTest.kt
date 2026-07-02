@@ -46,4 +46,52 @@ class RaceCoachingRulesTest {
         val events = RaceCoachingRules.evaluateAll(ctx, plan, UserSettings())
         assertNotNull(events.find { it.ruleId == RuleId.RACE_FINISH_75 })
     }
+
+    @Test
+    fun `negative split fires when too hot in opening segment`() {
+        val ctx = RideContext(
+            activeMode = ActiveMode(RideMode.RACE, ModeSource.MANUAL_OVERRIDE),
+            rideElapsedSec = 1200,
+            distanceKm = 20f,
+            ftp = 250,
+            power30sAvg = 220,
+        )
+        val events = RaceCoachingRules.evaluateAll(ctx, plan, UserSettings())
+        assertTrue(events.any { it.ruleId == RuleId.RACE_NEGATIVE_SPLIT })
+    }
+
+    @Test
+    fun `vi watchdog fires when variability high`() {
+        val ctx = RideContext(
+            activeMode = ActiveMode(RideMode.RACE, ModeSource.MANUAL_OVERRIDE),
+            rideElapsedSec = 3600,
+            ftp = 250,
+            power30sAvg = 205,
+            variabilityIndex = 1.10f,
+        )
+        val events = RaceCoachingRules.evaluateAll(ctx, plan, UserSettings())
+        assertTrue(events.any { it.ruleId == RuleId.RACE_VI_HIGH })
+    }
+
+    @Test
+    fun `t2 prep fires in final 20 minutes`() {
+        val ctx = RideContext(
+            activeMode = ActiveMode(RideMode.RACE, ModeSource.MANUAL_OVERRIDE),
+            rideElapsedSec = (plan.durationMin - 20) * 60L,
+            ftp = 250,
+        )
+        val events = RaceCoachingRules.evaluateAll(ctx, plan, UserSettings())
+        assertTrue(events.any { it.ruleId == RuleId.RACE_T2_PREP })
+    }
+
+    @Test
+    fun `disabled plan produces no events`() {
+        val ctx = RideContext(
+            activeMode = ActiveMode(RideMode.RACE, ModeSource.MANUAL_OVERRIDE),
+            rideElapsedSec = 3600,
+            power30sAvg = 300,
+            ftp = 250,
+        )
+        assertTrue(RaceCoachingRules.evaluateAll(ctx, plan.copy(enabled = false), UserSettings()).isEmpty())
+    }
 }

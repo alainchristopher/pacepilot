@@ -18,6 +18,7 @@ object PacePilotTheme {
     val TextTertiary = Color(0xFF6B6B6B)
     val Success = Color(0xFF00E676)
     val SuccessMuted = Color(0x1A00E676)
+    val Error = Color(0xFFFF5252)
     val FieldBorder = Color(0xFF242424)
     val FieldBorderFocused = Color(0xFFFF6D00)
     val CardShape = RoundedCornerShape(14.dp)

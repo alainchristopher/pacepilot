@@ -7,7 +7,6 @@ targetSdk = "34"
 karooExt = "1.1.8"
 coroutines = "1.8.1"
 compose-bom = "2024.09.03"
-glance = "1.1.0"
 timber = "5.0.1"
 kotlinx-serialization = "1.7.3"
 junit = "4.13.2"
@@ -29,7 +28,6 @@ androidx-compose-ui = { group = "androidx.compose.ui", name = "ui" }
 androidx-compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
 androidx-compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version = "1.9.2" }
-androidx-glance-appwidget = { group = "androidx.glance", name = "glance-appwidget", version.ref = "glance" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version = "1.13.1" }
 
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }

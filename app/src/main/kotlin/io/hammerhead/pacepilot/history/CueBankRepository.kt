@@ -21,7 +21,11 @@ class CueBankRepository(context: Context) {
         cached ?: readDisk().also { cached = it }
     }
 
-    fun current(): CueBank? = cached
+    /** Always read disk so Prepare offline coach applies without service restart. */
+    fun current(): CueBank? {
+        val disk = readDisk()
+        return disk.takeIf { it.isReady }
+    }
 
     suspend fun save(bank: CueBank) = mutex.withLock {
         withContext(Dispatchers.IO) {

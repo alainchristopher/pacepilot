@@ -21,7 +21,8 @@ class RacePlanRepository(context: Context) {
         cached ?: readDisk().also { cached = it }
     }
 
-    fun current(): RacePlan = cached ?: RacePlan()
+    /** Always read disk so settings saved from MainActivity apply mid-ride. */
+    fun current(): RacePlan = readDisk()
 
     suspend fun save(plan: RacePlan) = mutex.withLock {
         withContext(Dispatchers.IO) {

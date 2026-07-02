@@ -21,6 +21,19 @@ class SettingsRepository(context: Context) {
     //  that instance's StateFlow — not the service's separate instance)
     val current: UserSettings get() = load()
 
+    fun registerChangeListener(listener: SharedPreferences.OnSharedPreferenceChangeListener) {
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+    }
+
+    fun unregisterChangeListener(listener: SharedPreferences.OnSharedPreferenceChangeListener) {
+        prefs.unregisterOnSharedPreferenceChangeListener(listener)
+    }
+
+    /** Reload from disk into the flow — used when another component saves prefs. */
+    fun refreshFromDisk() {
+        _settings.value = load()
+    }
+
     fun save(settings: UserSettings) {
         prefs.edit()
             .putBoolean(KEY_APP_ENABLED, settings.appEnabled)
