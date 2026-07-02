@@ -263,9 +263,16 @@ MIT
 - **AI indicator** — Alert title shows ✦ when Mercury/Gemini upgraded the message
 - CI pipeline fully operational with `GPR_KEY` secret
 
-### v1.4 — planned
+### v2.0 — shipped ✓
+- **Offline-first coaching** — rotating message pools + pre-ride AI cue bank (`Prepare offline coach`)
+- **Race Mode** — Ironman 70.3 bike-leg rules: power band, run protection, finish-line, negative split, VI watchdog, race fueling
+- **RACE settings card** + `mode_race` BonusAction; `race_delta` data field
+- **FUELING / ADVANCED** settings exposed; drink-interval bug fixed; mid-ride settings apply live
+- **`tools/analyze_rides.py`** — Karoo FIT + Strava export → fitness report, race targets, ride history seed
+- Post-ride timeline in settings; coaching source on `coaching_status` field
+
+### v2.1 — planned
 - Wind-adjusted pacing (Headwind data already ingested, coaching logic pending)
-- Finish-line / negative-split strategy mode
 - Hammerhead Extension Library submission
 
 ### Later
