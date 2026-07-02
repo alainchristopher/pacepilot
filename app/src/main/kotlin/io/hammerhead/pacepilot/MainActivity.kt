@@ -41,24 +41,25 @@ import io.hammerhead.pacepilot.history.RideHistoryRepository
 import io.hammerhead.pacepilot.model.RideMode
 import io.hammerhead.pacepilot.settings.SettingsRepository
 import io.hammerhead.pacepilot.settings.UserSettings
+import io.hammerhead.pacepilot.ui.PacePilotTheme
 import kotlinx.coroutines.launch
 
-private val BG = Color(0xFF050505)
-private val CardBg = Color(0xFF111111)
-private val CardBorder = Color(0xFF1A1A1A)
-private val Primary = Color(0xFFFF6D00)
-private val PrimaryDim = Color(0xFFCC5700)
-private val PrimaryMuted = Color(0x29FF6D00)
-private val PrimaryGhost = Color(0x14FF6D00)
-private val TextPrimary = Color(0xFFF5F5F5)
-private val TextSecondary = Color(0xFF9E9E9E)
-private val TextTertiary = Color(0xFF6B6B6B)
-private val Success = Color(0xFF00E676)
-private val SuccessMuted = Color(0x1A00E676)
-private val FieldBorder = Color(0xFF242424)
-private val FieldBorderFocused = Color(0xFFFF6D00)
-private val CardShape = RoundedCornerShape(14.dp)
-private val PillShape = RoundedCornerShape(999.dp)
+private val BG = PacePilotTheme.BG
+private val CardBg = PacePilotTheme.CardBg
+private val CardBorder = PacePilotTheme.CardBorder
+private val Primary = PacePilotTheme.Primary
+private val PrimaryDim = PacePilotTheme.PrimaryDim
+private val PrimaryMuted = PacePilotTheme.PrimaryMuted
+private val PrimaryGhost = PacePilotTheme.PrimaryGhost
+private val TextPrimary = PacePilotTheme.TextPrimary
+private val TextSecondary = PacePilotTheme.TextSecondary
+private val TextTertiary = PacePilotTheme.TextTertiary
+private val Success = PacePilotTheme.Success
+private val SuccessMuted = PacePilotTheme.SuccessMuted
+private val FieldBorder = PacePilotTheme.FieldBorder
+private val FieldBorderFocused = PacePilotTheme.FieldBorderFocused
+private val CardShape = PacePilotTheme.CardShape
+private val PillShape = PacePilotTheme.PillShape
 
 class MainActivity : ComponentActivity() {
 
