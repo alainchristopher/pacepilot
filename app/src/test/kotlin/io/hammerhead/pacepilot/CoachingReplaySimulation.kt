@@ -4,6 +4,7 @@ import io.hammerhead.pacepilot.coaching.*
 import io.hammerhead.pacepilot.model.*
 import io.hammerhead.pacepilot.history.RacePlan
 import io.hammerhead.pacepilot.settings.UserSettings
+import io.hammerhead.pacepilot.util.ZoneCalculator
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.math.sin

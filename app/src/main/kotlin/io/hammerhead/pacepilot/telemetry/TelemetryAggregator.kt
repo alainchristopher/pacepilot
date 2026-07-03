@@ -8,6 +8,7 @@ import io.hammerhead.karooext.models.StreamState
 import io.hammerhead.karooext.models.UserProfile
 import io.hammerhead.pacepilot.model.ActiveMode
 import io.hammerhead.pacepilot.model.IntervalPhase
+import io.hammerhead.pacepilot.model.RideContext
 import io.hammerhead.pacepilot.model.RideMode
 import io.hammerhead.pacepilot.model.currentMode
 import io.hammerhead.pacepilot.coaching.FuelingIntelligence
@@ -338,9 +339,6 @@ class TelemetryAggregator(
                                 routeTotalElevationGainM = runCatching {
                                     nav.climbs.sumOf { it.totalElevation }.toFloat()
                                 }.getOrElse { 0f },
-                                routeDistanceKm = runCatching {
-                                    (nav.routeDistance / 1000.0).toFloat()
-                                }.getOrElse { c.routeDistanceKm },
                             )
                         }
                     }
